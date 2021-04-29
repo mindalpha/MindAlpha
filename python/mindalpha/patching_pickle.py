@@ -42,8 +42,6 @@ class SourcePatchingPickler(cloudpickle.CloudPickler):
         if hasattr(forward_method, '_SourcePatchingPickler__filename'):
             return
         filename = inspect.getsourcefile(forward_method)
-        if not filename.startswith('<ipython-input-'):
-            return
         sourcelines, file_lineno = inspect.getsourcelines(forward_method)
         sourcelines = tuple(sourcelines)
         setattr(forward_method, '_SourcePatchingPickler__filename', filename)
