@@ -186,8 +186,8 @@ class ExperimentOperate(object):
                 raise RuntimeError("dump pickle error")
         else:
             ExperimentOperate.dump_pickle(job_obj)
-        if not delay_backfill:
-            self.unpause_dag(job_obj)
+        # if not delay_backfill:
+            # self.unpause_dag(job_obj)
 
     def dump_pickle(job_obj):
         local_pickle_file_path = job_obj.local_pickle_file_path
@@ -253,8 +253,11 @@ class ExperimentOperate(object):
         if local_pickle_file_path.startswith(self.local_pickle_tmp_dir):
             suffix = local_pickle_file_path.replace(self.local_pickle_tmp_dir, '')
             s3_path = self.airflow_s3_sync_path + suffix
-            print('upload file to s3: ' + local_pickle_file_path, s3_path)
-            os.system("aws s3 cp {0} {1}".format(local_pickle_file_path, s3_path))
+            try:
+                os.system("aws s3 cp {0} {1}".format(local_pickle_file_path, s3_path))
+                print('success upload pickle to s3: ' + local_pickle_file_path, s3_path)
+            except Exception as err:
+                raise RuntimeError(f"s3 err: {err}")
 
     def get_airflow_rest_authorization_token(self):
         airflow_rest_authorization_token = os.getenv(ExperimentOperate._AIRFLOW_REST_AUTHORIZATION_TOKEN, '')
