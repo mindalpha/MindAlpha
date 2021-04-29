@@ -21,6 +21,22 @@ import cloudpickle
 from cloudpickle import PYPY
 import torch
 
+def _patch_lookup_module_and_qualname():
+    _orig_whichmodule = cloudpickle.cloudpickle._whichmodule
+    _orig_lookup_module_and_qualname = cloudpickle.cloudpickle._lookup_module_and_qualname
+    def patched_lookup_module_and_qualname(obj, name=None):
+        if name is None:
+            name = getattr(obj, '__qualname__', None)
+        if name is None:
+            name = getattr(obj, '__name__', None)
+        module_name = _orig_whichmodule(obj, name)
+        if module_name is None:
+            return None
+        if module_name.startswith('unusual_prefix_'):
+            return None
+        return _orig_lookup_module_and_qualname(obj, name)
+    cloudpickle.cloudpickle._lookup_module_and_qualname = patched_lookup_module_and_qualname
+
 def _patch_getsourcelines():
     _orig_getsourcelines = inspect.getsourcelines
     def patched_getsourcelines(obj):
