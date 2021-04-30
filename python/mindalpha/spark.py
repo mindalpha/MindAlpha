@@ -25,7 +25,6 @@ class SessionBuilder(object):
                  worker_memory='5G',
                  server_memory='5G',
                  coordinator_memory='5G',
-                 omp_num_threads=None,
                  app_name='PySparkNotebook',
                  spark_master=None,
                  deploy_mode='cluster',
@@ -39,7 +38,6 @@ class SessionBuilder(object):
         self.worker_memory = worker_memory
         self.server_memory = server_memory
         self.coordinator_memory = coordinator_memory
-        self.omp_num_threads = omp_num_threads
         self.app_name = app_name
         self.spark_master = spark_master
         self.deploy_mode = deploy_mode
@@ -71,12 +69,11 @@ class SessionBuilder(object):
         executor_memory = job_utils.merge_storage_size(self.worker_memory, self.server_memory)
         builder.config('spark.executor.memory', executor_memory)
         builder.config('spark.executor.instances', str(self._get_executor_count()))
-        executor_cores = max(self.worker_cpu, self.server_cpu)
-        builder.config('spark.executor.cores', str(executor_cores))
-        omp_num_threads = self.omp_num_threads
-        if omp_num_threads is None:
-            omp_num_threads = executor_cores
-        builder.config('spark.executorEnv.OMP_NUM_THREADS', str(omp_num_threads))
+        num_threads = max(self.worker_cpu, self.server_cpu)
+        builder.config('spark.executor.cores', str(num_threads))
+        builder.config('spark.task.cpus', str(num_threads))
+        builder.config('spark.kubernetes.executor.request.cores', str(num_threads))
+        builder.config('spark.executorEnv.OMP_NUM_THREADS', str(num_threads))
 
     def _add_extra_configs(self, builder):
         builder.config('spark.python.worker.reuse', 'true')
