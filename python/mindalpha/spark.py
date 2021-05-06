@@ -77,6 +77,7 @@ class SessionBuilder(object):
 
     def _add_extra_configs(self, builder):
         builder.config('spark.python.worker.reuse', 'true')
+        builder.config('spark.dynamicAllocation.enabled', 'false')
         builder.config('spark.shuffle.service.enabled', 'false')
         builder.config('spark.sql.execution.arrow.pyspark.enabled', 'true')
         builder.config('spark.task.maxFailures', '1')
