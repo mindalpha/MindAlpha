@@ -25,10 +25,20 @@ online prediction.
   Serving for online prediction.
 
 ## Build
+Firstly, run script to build a docker image
 
-Use [docker/Dockerfile](docker/Dockerfile) to build a docker image
-and launch a container with the image, then execute ``./compile.sh``
-in the container.
+``` shell
+sh run_build.sh -i
+```
+
+more detail please refer [docker/Dockerfile](docker/Dockerfile)
+
+and run script to compile sources(*cpp&&py) to get dynamic-link library (\*.so) and
+python install packages (\*.whl) which will generate at directory *build* by default.
+
+``` shell
+sh run_build.sh -m
+```
 
 ## Tutorials
 
