@@ -18,21 +18,19 @@ FROM ubuntu:20.04
 
 ENV LANG=C
 ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update
-RUN apt-get upgrade -y
-
+RUN apt-get update && apt-get upgrade -y
 RUN ln -svf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && env DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
-RUN apt-get install -y build-essential curl cmake patchelf python3 python3-pip ninja-build git wget software-properties-common gnupg2 awscli
+RUN apt-get install --fix-missing -y build-essential curl cmake patchelf python3 python3-pip ninja-build git wget gnupg2
 RUN apt-get update
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 30
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 30
+RUN python -m pip install --upgrade awscli
 
-RUN apt-get install -y pkg-config
-RUN apt-get install -y libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev
-RUN apt-get install -y libboost-dev pybind11-dev libjson11-1-dev libfmt-dev
-RUN apt-get install -y libspdlog-dev libthrift-dev thrift-compiler libzmq5-dev
+RUN apt-get install -y pkg-config                                        \
+        libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev \
+        libboost-dev pybind11-dev libjson11-1-dev libfmt-dev             \
+        libspdlog-dev libthrift-dev thrift-compiler libzmq5-dev
 
 RUN git clone https://github.com/zeromq/cppzmq.git /tmp/cppzmq &&         \
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
