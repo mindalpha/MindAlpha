@@ -185,12 +185,13 @@ class Model(object):
             futures.append(future)
         await asyncio.gather(*futures)
 
-    async def _pull_tensors(self):
+    async def _pull_tensors(self, *, force_mode=False):
         futures = []
         for tensor in self._tensors:
-            # Pulling dense parameters in prediction mode is redundant.
-            if not self.training and tensor.is_dense:
-                continue
+            if not force_mode:
+                # Pulling dense parameters in prediction mode is redundant.
+                if not self.training and tensor.is_dense:
+                    continue
             future = tensor._pull_tensor()
             futures.append(future)
         await asyncio.gather(*futures)
@@ -295,9 +296,14 @@ class Model(object):
             message += "call the 'eval' method to set it in evaluation mode explicitly"
             raise RuntimeError(message)
         self.agent.barrier()
-        asyncio.run(self._pull_tensors())
+        asyncio.run(self._pull_tensors(force_mode=True))
         if self.agent.rank == 0:
             self._do_export(path)
+        self.agent.barrier()
+
+    def sync(self):
+        self.agent.barrier()
+        asyncio.run(self._pull_tensors(force_mode=True))
         self.agent.barrier()
 
     def __call__(self, *inputs):

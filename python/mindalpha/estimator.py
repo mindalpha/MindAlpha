@@ -97,6 +97,7 @@ class PyTorchAgent(Agent):
     @classmethod
     def _collect_module(cls, _):
         self = __class__.get_instance()
+        self.model.sync()
         if self.rank != 0:
             return ()
         state = self.module.state_dict()

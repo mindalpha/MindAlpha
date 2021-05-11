@@ -138,7 +138,7 @@ class DistributedTrainer(object):
         if self.agent.rank == 0:
             asyncio.run(self.model._push_tensors(is_value=True))
         self.agent.barrier()
-        asyncio.run(self.model._pull_tensors())
+        asyncio.run(self.model._pull_tensors(force_mode=True))
         self.agent.barrier()
 
     def load(self, dir_path, *, keep_meta=False):
@@ -156,7 +156,7 @@ class DistributedTrainer(object):
         self.agent.barrier()
         asyncio.run(self.model._load_tensors(dir_path, keep_meta=keep_meta))
         self.agent.barrier()
-        asyncio.run(self.model._pull_tensors())
+        asyncio.run(self.model._pull_tensors(force_mode=True))
         self.agent.barrier()
 
     def save(self, dir_path):
