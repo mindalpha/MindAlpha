@@ -82,6 +82,46 @@ SeekStream *SeekStream::CreateForRead(const char *uri, bool try_create) {
     return FileSystem::GetInstance(path)->OpenForRead(path, try_create);
 }
 
+InputStream::InputStream(const std::string& url)
+    : stream_(Stream::Create(url.c_str(), "r", true))
+{
+    if (!stream_)
+    {
+        std::string serr;
+        serr.append("Fail to open '");
+        serr.append(url);
+        serr.append("' for input.\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
+}
+
+size_t InputStream::Read(void* buffer, size_t size)
+{
+    return stream_->Read(buffer, size);
+}
+
+OutputStream::OutputStream(const std::string& url)
+    : stream_(Stream::Create(url.c_str(), "w", true))
+{
+    if (!stream_)
+    {
+        std::string serr;
+        serr.append("Fail to open '");
+        serr.append(url);
+        serr.append("' for output.\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
+}
+
+void OutputStream::Write(const void* buffer, size_t size)
+{
+    stream_->Write(buffer, size);
+}
+
 void StreamWriteAll(const std::string& url, const char* data, size_t size)
 {
     auto stream = Stream::Create(url.c_str(), "w", true);

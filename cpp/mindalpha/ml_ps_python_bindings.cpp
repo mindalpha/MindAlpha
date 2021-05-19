@@ -250,8 +250,31 @@ PYBIND11_MODULE(_mindalpha, m)
         ;
 
     py::class_<mindalpha::ModelMetricBuffer>(m, "ModelMetricBuffer")
-        .def("update_buffer", &mindalpha::ModelMetricBuffer::UpdateBuffer)
-        .def("compute_auc", &mindalpha::ModelMetricBuffer::ComputeAUC)
+        .def_static("update_buffer", &mindalpha::ModelMetricBuffer::UpdateBuffer)
+        .def_static("compute_auc", &mindalpha::ModelMetricBuffer::ComputeAUC)
+        ;
+
+    py::class_<mindalpha::InputStream, std::shared_ptr<mindalpha::InputStream>>(m, "InputStream")
+        .def(py::init<const std::string>())
+        .def("read", [](mindalpha::InputStream& stream, size_t size)
+                     {
+                         std::string buffer(size, '\0');
+                         const size_t nread = stream.Read(buffer.data(), size);
+                         buffer.resize(nread);
+                         return py::bytes(buffer);
+                     })
+        ;
+
+    py::class_<mindalpha::OutputStream, std::shared_ptr<mindalpha::OutputStream>>(m, "OutputStream")
+        .def(py::init<const std::string>())
+        .def("write", [](mindalpha::OutputStream& stream, py::bytes data)
+                      {
+                          char* buffer;
+                          ssize_t length;
+                          if (PYBIND11_BYTES_AS_STRING_AND_SIZE(data.ptr(), &buffer, &length))
+                              py::pybind11_fail("Unable to extract bytes contents!");
+                          stream.Write(buffer, length);
+                      })
         ;
 
     m.def("stream_write_all", [](const std::string& url, py::bytes data)

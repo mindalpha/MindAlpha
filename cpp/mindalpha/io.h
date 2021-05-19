@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <memory>
 
 namespace mindalpha
 {
@@ -74,6 +75,26 @@ public:
      * \return the created stream, can be NULL when allow_null == true and file do not exist
      */
     static SeekStream *CreateForRead(const char *uri, bool allow_null = false);
+};
+
+class InputStream
+{
+public:
+    explicit InputStream(const std::string& url);
+    size_t Read(void* buffer, size_t size);
+
+private:
+    std::unique_ptr<Stream> stream_;
+};
+
+class OutputStream
+{
+public:
+    explicit OutputStream(const std::string& url);
+    void Write(const void* buffer, size_t size);
+
+private:
+    std::unique_ptr<Stream> stream_;
 };
 
 void StreamWriteAll(const std::string& url, const char* data, size_t size);
