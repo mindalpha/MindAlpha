@@ -31,7 +31,7 @@ from .cast import Cast
 from .distributed_tensor import DistributedTensor
 
 class Model(object):
-    def __init__(self, agent, module, experiment_name=None, model_version=None):
+    def __init__(self, agent, module, experiment_name=None, model_version=None, name_prefix=None):
         if not isinstance(agent, Agent):
             raise TypeError(f"agent must be Agent; {agent!r} is invalid")
         if not isinstance(module, torch.nn.Module):
@@ -44,10 +44,14 @@ class Model(object):
             if not isinstance(model_version, str):
                 raise TypeError(f"model_version must be string; {model_version!r} is invalid")
             model_version = model_version.strip()
+        if name_prefix is not None:
+            if not isinstance(name_prefix, str):
+                raise TypeError(f"name_prefix must be string; {name_prefix!r} is invalid")
         self._agent = agent
         self._module = module
         self._experiment_name = experiment_name
         self._model_version = model_version
+        self._name_prefix = name_prefix
         self._tensors = []
 
     @property
@@ -90,6 +94,19 @@ class Model(object):
         if self._model_version is not None:
             raise RuntimeError(f"can not reset model_version {self._model_version!r} to {value!r}")
         self._model_version = value
+
+    @property
+    def name_prefix(self):
+        return self._name_prefix
+
+    @name_prefix.setter
+    def name_prefix(self, value):
+        if value is not None:
+            if not isinstance(value, str):
+                raise TypeError(f"name_prefix must be string; {value!r} is invalid")
+        if self._name_prefix is not None:
+            raise RuntimeError(f"can not reset name_prefix {self._name_prefix!r} to {value!r}")
+        self._name_prefix = value
 
     @property
     def training(self):
@@ -139,8 +156,8 @@ class Model(object):
         if running_mean is None and running_var is None:
             return
         if running_mean is not None and running_var is not None:
-            tensor1 = DistributedTensor(running_mean_name, running_mean)
-            tensor2 = DistributedTensor(running_var_name, running_var)
+            tensor1 = DistributedTensor(running_mean_name, running_mean, self.name_prefix)
+            tensor2 = DistributedTensor(running_var_name, running_var, self.name_prefix)
             self._tensors.append(tensor1)
             self._tensors.append(tensor2)
             return
@@ -164,7 +181,7 @@ class Model(object):
 
     def _collect_dense_parameters(self):
         for name, param in self.module.named_parameters():
-            tensor = DistributedTensor(name, param)
+            tensor = DistributedTensor(name, param, self.name_prefix)
             self._tensors.append(tensor)
 
     def _collect_dense_buffers(self):
@@ -331,23 +348,23 @@ class Model(object):
         return False
 
     @classmethod
-    def wrap(cls, agent, module):
+    def wrap(cls, agent, module, experiment_name=None, model_version=None, name_prefix=None):
         if (cls._contains_embedding_operators(module) or
             cls._contains_cast_operators(module)):
-            return SparseModel(agent, module)
+            return SparseModel(agent, module, experiment_name, model_version, name_prefix)
         else:
-            return Model(agent, module)
+            return Model(agent, module, experiment_name, model_version, name_prefix)
 
 class SparseModel(Model):
-    def __init__(self, agent, module, experiment_name=None):
-        super().__init__(agent, module, experiment_name)
+    def __init__(self, agent, module, experiment_name=None, model_version=None, name_prefix=None):
+        super().__init__(agent, module, experiment_name, model_version, name_prefix)
         self._embedding_operators = []
         self._cast_operators = []
 
     def _collect_embedding_operators(self):
         for name, mod in self.module.named_modules():
             if isinstance(mod, EmbeddingOperator):
-                tensor = DistributedTensor(name, mod)
+                tensor = DistributedTensor(name, mod, self.name_prefix)
                 self._tensors.append(tensor)
                 self._embedding_operators.append(tensor)
                 mod._distributed_tensor = tensor

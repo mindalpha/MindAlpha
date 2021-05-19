@@ -22,8 +22,8 @@ from .embedding import EmbeddingOperator
 from .url_utils import use_s3
 
 class DistributedTensor(object):
-    def __init__(self, name, item):
-        self.__name = name
+    def __init__(self, name, item, name_prefix):
+        self.__name = name if name_prefix is None else name_prefix + name
         self.__item = item
         self.__handle = None
 
