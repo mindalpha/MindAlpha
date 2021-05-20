@@ -32,6 +32,8 @@ class PyTorchAgent(Agent):
         self.module = None
         self.updater = None
         self.dataset = None
+        self.model_export_selector = None
+        self.tensor_name_prefix = None
         self.model = None
         self.trainer = None
         self.is_training_mode = None
@@ -66,15 +68,17 @@ class PyTorchAgent(Agent):
         buf = io.BytesIO()
         torch.save(self.module, buf, pickle_module=patching_pickle)
         module = buf.getvalue()
+        model_export_selector = self.model_export_selector
         rdd = self.spark_context.parallelize(range(self.worker_count), self.worker_count)
-        rdd.barrier().mapPartitions(lambda _: __class__._distribute_module(module, _)).collect()
+        rdd.barrier().mapPartitions(lambda _: __class__._distribute_module(module, model_export_selector, _)).collect()
 
     @classmethod
-    def _distribute_module(cls, module, _):
+    def _distribute_module(cls, module, model_export_selector, _):
         buf = io.BytesIO(module)
         module = torch.load(buf)
         self = __class__.get_instance()
         self.module = module
+        self.model_export_selector = model_export_selector
         return _
 
     def distribute_updater(self):
@@ -104,7 +108,7 @@ class PyTorchAgent(Agent):
         return state,
 
     def setup_model(self):
-        self.model = Model.wrap(self, self.module)
+        self.model = Model.wrap(self, self.module, name_prefix=self.tensor_name_prefix)
 
     def setup_trainer(self):
         self.trainer = DistributedTrainer(self.model, updater=self.updater)
@@ -133,7 +137,7 @@ class PyTorchAgent(Agent):
             self.model.model_version = self.model_version
             self.model.experiment_name = self.experiment_name
             self.model.prune_small(0.0)
-            self.model.export(self.model_export_path)
+            self.model.export(self.model_export_path, model_export_selector=self.model_export_selector)
 
     def worker_stop(self):
         # Make sure the final metric buffers are pushed.
@@ -243,6 +247,8 @@ class PyTorchLauncher(PSLauncher):
         self.module = None
         self.updater = None
         self.dataset = None
+        self.model_export_selector = None
+        self.tensor_name_prefix = None
         self.worker_count = None
         self.server_count = None
         self.agent_class = None
@@ -273,12 +279,14 @@ class PyTorchLauncher(PSLauncher):
         agent.module = self.module
         agent.updater = self.updater
         agent.dataset = self.dataset
+        agent.model_export_selector = self.model_export_selector
         self.agent_object = agent
 
     def launch(self):
         self._worker_count = self.worker_count
         self._server_count = self.server_count
         self._agent_attributes = dict()
+        self._agent_attributes['tensor_name_prefix'] = self.tensor_name_prefix
         self._agent_attributes['is_training_mode'] = self.is_training_mode
         self._agent_attributes['model_in_path'] = self.model_in_path
         self._agent_attributes['model_out_path'] = self.model_out_path
