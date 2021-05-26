@@ -12,7 +12,7 @@ online prediction.
 * Efficient IO with PySpark. Minibatches read by PySpark as pandas DataFrames
   can be feed directly to models.
 
-* Similar API with PyTorch and Spark ML, users familar with PyTorch and
+* Similar API with PyTorch and Spark MLlib, users familar with PyTorch and
   PySpark can get started quickly.
 
 * Wrap custom sparse layers as PyTorch modules, making them easy to use.
@@ -45,4 +45,4 @@ sh run_build.sh -m
 Two tutorials are given:
 
 * [MindAlpha Getting Started](tutorials/mindalpha-getting-started.ipynb) introduces the basic API of MindAlpha briefly.
-* [MindAlpha Tutorial](tutorials/mindalpha-tutorial.ipynb) shows how to use MindAlpha in production setting.
+* [MindAlpha Tutorial](tutorials/mindalpha-tutorial.ipynb) shows how to use MindAlpha in the production environment.

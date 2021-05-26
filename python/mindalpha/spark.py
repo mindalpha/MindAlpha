@@ -25,7 +25,7 @@ class SessionBuilder(object):
                  worker_memory='5G',
                  server_memory='5G',
                  coordinator_memory='5G',
-                 app_name='PySparkNotebook',
+                 app_name=None,
                  spark_master=None,
                  deploy_mode='cluster',
                  log_level='WARN'):
@@ -48,7 +48,26 @@ class SessionBuilder(object):
         return num
 
     def _config_app_name(self, builder):
-        builder.appName(self.app_name)
+        app_name = self.app_name
+        if app_name is None:
+            if self._is_interactive():
+                app_name = 'MindAlpha-Notebook'
+            else:
+                app_name = 'MindAlpha-Job'
+        builder.appName(app_name)
+
+    def _is_interactive(self):
+        try:
+            ipython = get_ipython()
+        except NameError:
+            return False  # Probably standard Python interpreter
+        name = ipython.__class__.__name__
+        if name == 'ZMQInteractiveShell':
+            return True   # Jupyter Notebook or QtConsole
+        elif name == 'TerminalInteractiveShell':
+            return False  # Terminal running IPython
+        else:
+            return False  # Other type (?)
 
     def _config_spark_master(self, builder):
         if self.local:
