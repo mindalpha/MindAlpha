@@ -57,6 +57,18 @@ else:
     from .estimator import PyTorchModel
     from .estimator import PyTorchEstimator
 
+try:
+    import pyspark
+    import faiss
+except ImportError:
+    pass
+else:
+    from .retrieval import RetrievalModule
+    from .retrieval import FaissIndexBuildingAgent
+    from .retrieval import FaissIndexRetrievalAgent
+    from .retrieval import RetrievalModel
+    from .retrieval import RetrievalEstimator
+
 from ._mindalpha import get_mindalpha_version
 __version__ = get_mindalpha_version()
 del get_mindalpha_version

@@ -195,7 +195,6 @@ class PyTorchAgent(Agent):
 
     def preprocess_minibatch(self, minibatch):
         import numpy as np
-        import pandas as pd
         ndarrays = [col.values for col in minibatch]
         labels = minibatch[self.input_label_column_index].values.astype(np.int64)
         return ndarrays, labels

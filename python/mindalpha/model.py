@@ -29,6 +29,7 @@ from .updater import EMATensorUpdater
 from .embedding import EmbeddingOperator
 from .cast import Cast
 from .distributed_tensor import DistributedTensor
+from .url_utils import use_s3
 
 class Model(object):
     def __init__(self, agent, module, experiment_name=None, model_version=None, name_prefix=None):
@@ -291,14 +292,14 @@ class Model(object):
         module._meta = string
         scm = torch.jit.script(module)
         dir_path = os.path.dirname(path)
-        _mindalpha.ensure_local_directory(dir_path)
+        _mindalpha.ensure_local_directory(use_s3(dir_path))
         class FakeStream(object):
             def write(self, data):
-                _mindalpha.stream_write_all(path, data)
+                _mindalpha.stream_write_all(use_s3(path), data)
         fout = FakeStream()
         torch.jit.save(scm, fout)
         data = (string + '\n').encode('utf-8')
-        _mindalpha.stream_write_all(path + '.json', data)
+        _mindalpha.stream_write_all(use_s3(path + '.json'), data)
 
     def export(self, path, *, model_export_selector=None):
         if not isinstance(path, str) or not path.strip():
