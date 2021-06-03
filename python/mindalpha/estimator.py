@@ -311,10 +311,10 @@ class PyTorchLauncher(PSLauncher):
 class PyTorchHelperMixin(object):
     def __init__(self,
                  module=None,
-                 updater=AdamTensorUpdater(1e-5),
+                 updater=None,
                  worker_count=100,
                  server_count=100,
-                 agent_class=PyTorchAgent,
+                 agent_class=None,
                  model_in_path=None,
                  model_out_path=None,
                  model_export_path=None,
@@ -360,13 +360,13 @@ class PyTorchHelperMixin(object):
     def _check_properties(self):
         if not isinstance(self.module, torch.nn.Module):
             raise TypeError(f"module must be torch.nn.Module; {self.module!r} is invalid")
-        if not isinstance(self.updater, TensorUpdater):
+        if self.updater is not None and not isinstance(self.updater, TensorUpdater):
             raise TypeError(f"updater must be TensorUpdater; {self.updater!r} is invalid")
         if not isinstance(self.worker_count, int) or self.worker_count <= 0:
             raise TypeError(f"worker_count must be positive integer; {self.worker_count!r} is invalid")
         if not isinstance(self.server_count, int) or self.server_count <= 0:
             raise TypeError(f"server_count must be positive integer; {self.server_count!r} is invalid")
-        if not issubclass(self.agent_class, PyTorchAgent):
+        if self.agent_class is not None and not issubclass(self.agent_class, PyTorchAgent):
             raise TypeError(f"agent_class must be subclass of PyTorchAgent; {self.agent_class!r} is invalid")
         if self.model_in_path is not None and not isinstance(self.model_in_path, str):
             raise TypeError(f"model_in_path must be string; {self.model_in_path!r} is invalid")
@@ -423,11 +423,11 @@ class PyTorchHelperMixin(object):
         self._check_properties()
         launcher = PyTorchLauncher()
         launcher.module = self.module
-        launcher.updater = self.updater
+        launcher.updater = self.updater or AdamTensorUpdater(1e-5)
         launcher.dataset = dataset
         launcher.worker_count = self.worker_count
         launcher.server_count = self.server_count
-        launcher.agent_class = self.agent_class
+        launcher.agent_class = self.agent_class or PyTorchAgent
         launcher.is_training_mode = is_training_mode
         launcher.model_in_path = self.model_in_path
         launcher.model_out_path = self.model_out_path
@@ -448,27 +448,32 @@ class PyTorchHelperMixin(object):
         launcher.extra_agent_attributes = self.extra_agent_attributes
         return launcher
 
+    def _get_model_arguments(self, module):
+        args = self.extra_agent_attributes.copy()
+        args['module'] = module
+        args['updater'] = self.updater
+        args['worker_count'] = self.worker_count
+        args['server_count'] = self.server_count
+        args['agent_class'] = self.agent_class
+        args['model_in_path'] = self.model_out_path
+        args['model_export_path'] = self.model_export_path
+        args['model_version'] = self.model_version
+        args['experiment_name'] = self.experiment_name
+        args['metric_update_interval'] = self.metric_update_interval
+        args['consul_host'] = self.consul_host
+        args['consul_port'] = self.consul_port
+        args['consul_endpoint_prefix'] = self.consul_endpoint_prefix
+        args['consul_model_sync_command'] = self.consul_model_sync_command
+        args['input_label_column_index'] = self.input_label_column_index
+        args['output_label_column_name'] = self.output_label_column_name
+        args['output_label_column_type'] = self.output_label_column_type
+        args['output_prediction_column_name'] = self.output_prediction_column_name
+        args['output_prediction_column_type'] = self.output_prediction_column_type
+        return args
+
     def _create_model(self, module):
-        model = PyTorchModel(module=module,
-                             updater=self.updater,
-                             worker_count=self.worker_count,
-                             server_count=self.server_count,
-                             agent_class=self.agent_class,
-                             model_in_path=self.model_out_path,
-                             model_export_path=self.model_export_path,
-                             model_version=self.model_version,
-                             experiment_name=self.experiment_name,
-                             metric_update_interval=self.metric_update_interval,
-                             consul_host=self.consul_host,
-                             consul_port=self.consul_port,
-                             consul_endpoint_prefix=self.consul_endpoint_prefix,
-                             consul_model_sync_command=self.consul_model_sync_command,
-                             input_label_column_index=self.input_label_column_index,
-                             output_label_column_name=self.output_label_column_name,
-                             output_label_column_type=self.output_label_column_type,
-                             output_prediction_column_name=self.output_prediction_column_name,
-                             output_prediction_column_type=self.output_prediction_column_type,
-                             **self.extra_agent_attributes)
+        args = self._get_model_arguments(module)
+        model = PyTorchModel(**args)
         return model
 
 class PyTorchModel(PyTorchHelperMixin, pyspark.ml.base.Model):
