@@ -18,6 +18,7 @@ import torch
 import faiss
 import pyspark
 from . import _mindalpha
+from .embedding import EmbeddingOperator
 from .estimator import PyTorchAgent
 from .estimator import PyTorchModel
 from .estimator import PyTorchEstimator
@@ -306,8 +307,15 @@ class RetrievalHelperMixin(object):
         model = RetrievalModel(**args)
         return model
 
+    def _reload_combine_schemas(self, module):
+        for name, mod in module.named_modules():
+            if isinstance(mod, EmbeddingOperator):
+                if mod.has_alternative_column_name_file_path:
+                    mod.reload_combine_schema(True)
+
 class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
     def _transform(self, dataset):
+        self._reload_combine_schemas(self.module)
         launcher = self._create_launcher(dataset, False)
         launcher.module = self.module.user_module
         launcher.tensor_name_prefix = '_user_module.'
@@ -345,6 +353,7 @@ class RetrievalEstimator(RetrievalHelperMixin, PyTorchEstimator):
         launcher.model_export_selector = lambda m: m.user_module, '_user_module.'
         launcher.launch()
         module = launcher.agent_object.module
+        self._reload_combine_schemas(module)
         module.eval()
         launcher2 = self._create_launcher(self.item_dataset, False)
         launcher2.module = module.item_module
