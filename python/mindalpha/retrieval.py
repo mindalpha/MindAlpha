@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import json
 import torch
 import faiss
 import pyspark
@@ -65,9 +66,16 @@ class FaissIndexBuildingAgent(PyTorchAgent):
         self.item_index_output_path = '%spart_%d_%d.dat' % (self.item_index_output_dir, self.worker_count, self.rank)
         self.item_ids_output_dir = use_s3('%sfaiss/item_ids/' % self.model_in_path)
         self.item_ids_output_path = '%spart_%d_%d.dat' % (self.item_ids_output_dir, self.worker_count, self.rank)
+        self.index_meta_output_dir = use_s3('%sfaiss/' % self.model_in_path)
+        self.index_meta_output_path = '%sindex_meta.json' % self.index_meta_output_dir
         _mindalpha.ensure_local_directory(self.item_index_output_dir)
         _mindalpha.ensure_local_directory(self.item_ids_output_dir)
-        self.faiss_index = faiss.IndexFlatL2(self.item_embedding_size)
+        _mindalpha.ensure_local_directory(self.index_meta_output_dir)
+        params = self.item_embedding_size, self.faiss_index_description, self.faiss_metric_type
+        print('faiss index params: %r' % (params,))
+        metric_type = getattr(faiss, self.faiss_metric_type)
+        params = self.item_embedding_size, self.faiss_index_description, metric_type
+        self.faiss_index = faiss.index_factory(*params)
         self.faiss_index = faiss.IndexIDMap(self.faiss_index)
         self.item_ids_stream = _mindalpha.OutputStream(self.item_ids_output_path)
 
@@ -77,9 +85,13 @@ class FaissIndexBuildingAgent(PyTorchAgent):
         df = df.select(self.feed_validation_minibatch()(*df.columns).alias('validate'))
         df.groupBy(df[0]).count().show()
 
+    def preprocess_minibatch(self, minibatch):
+        ndarrays = [col.values for col in minibatch]
+        return ndarrays
+
     def validate_minibatch(self, minibatch):
         self.model.eval()
-        ndarrays, labels = self.preprocess_minibatch(minibatch)
+        ndarrays = self.preprocess_minibatch(minibatch)
         predictions = self.model(ndarrays[:-1])
         ids_data = ''
         id_ndarray = ndarrays[-1]
@@ -104,11 +116,28 @@ class FaissIndexBuildingAgent(PyTorchAgent):
         self.item_ids_stream.write(ids_data)
         self.faiss_index.add_with_ids(embeddings, id_ndarray)
 
+    def get_index_meta(self):
+        meta_version = 1
+        partition_count = self.worker_count
+        meta = {
+            'meta_version' : meta_version,
+            'partition_count' : partition_count,
+        }
+        return meta
+
+    def output_index_meta(self):
+        if self.rank == 0:
+            meta = self.get_index_meta()
+            string = json.dumps(meta, separators=(',', ': '), indent=4)
+            data = (string + '\n').encode('utf-8')
+            _mindalpha.stream_write_all(self.index_meta_output_path, data)
+
     def output_faiss_index(self):
-        print('faiss index ntotal: %d' % self.faiss_index.ntotal)
+        print('faiss index ntotal [%d]: %d' % (self.rank, self.faiss_index.ntotal))
         item_index_stream = _mindalpha.OutputStream(self.item_index_output_path)
         item_index_writer = faiss.PyCallbackIOWriter(item_index_stream.write)
         faiss.write_index(self.faiss_index, item_index_writer)
+        self.output_index_meta()
         self.item_ids_stream = None
 
     def worker_stop(self):
@@ -120,12 +149,27 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         super().worker_start()
         self.load_faiss_index()
 
+    def get_index_meta(self):
+        from mindalpha.url_utils import use_s3
+        index_meta_input_dir = use_s3('%sfaiss/' % self.model_in_path)
+        index_meta_input_path = '%sindex_meta.json' % index_meta_input_dir
+        data = _mindalpha.stream_read_all(index_meta_input_path)
+        string = data.decode('utf-8')
+        meta = json.loads(string)
+        return meta
+
+    def get_partition_count(self):
+        meta = self.get_index_meta()
+        partition_count = meta['partition_count']
+        return partition_count
+
     def load_faiss_index(self):
         from mindalpha.url_utils import use_s3
         item_index_input_dir = use_s3('%sfaiss/item_index/' % self.model_in_path)
         self.faiss_index = faiss.IndexShards(self.item_embedding_size, True, False)
-        for rank in range(self.worker_count):
-            item_index_input_path = '%spart_%d_%d.dat' % (item_index_input_dir, self.worker_count, rank)
+        partition_count = self.get_partition_count()
+        for rank in range(partition_count):
+            item_index_input_path = '%spart_%d_%d.dat' % (item_index_input_dir, partition_count, rank)
             item_index_stream = _mindalpha.InputStream(item_index_input_path)
             item_index_reader = faiss.PyCallbackIOReader(item_index_stream.read)
             index = faiss.read_index(item_index_reader)
@@ -224,6 +268,8 @@ class RetrievalHelperMixin(object):
                  index_building_agent_class=None,
                  retrieval_agent_class=None,
                  item_embedding_size=None,
+                 faiss_index_description='Flat',
+                 faiss_metric_type='METRIC_INNER_PRODUCT',
                  item_id_column_name='item_id',
                  item_ids_column_indices=None,
                  item_ids_field_delimiter='\002',
@@ -238,6 +284,8 @@ class RetrievalHelperMixin(object):
         self.index_building_agent_class = index_building_agent_class
         self.retrieval_agent_class = retrieval_agent_class
         self.item_embedding_size = item_embedding_size
+        self.faiss_index_description = faiss_index_description
+        self.faiss_metric_type = faiss_metric_type
         self.item_id_column_name = item_id_column_name
         self.item_ids_column_indices = item_ids_column_indices
         self.item_ids_field_delimiter = item_ids_field_delimiter
@@ -247,6 +295,8 @@ class RetrievalHelperMixin(object):
         self.recommendation_info_column_name = recommendation_info_column_name
         self.retrieval_item_count = retrieval_item_count
         self.extra_agent_attributes['item_embedding_size'] = self.item_embedding_size
+        self.extra_agent_attributes['faiss_index_description'] = self.faiss_index_description
+        self.extra_agent_attributes['faiss_metric_type'] = self.faiss_metric_type
         self.extra_agent_attributes['item_id_column_name'] = self.item_id_column_name
         self.extra_agent_attributes['item_ids_column_indices'] = self.item_ids_column_indices
         self.extra_agent_attributes['item_ids_field_delimiter'] = self.item_ids_field_delimiter
@@ -268,6 +318,12 @@ class RetrievalHelperMixin(object):
             raise TypeError(f"retrieval_agent_class must be subclass of FaissIndexRetrievalAgent; {self.retrieval_agent_class!r} is invalid")
         if not isinstance(self.item_embedding_size, int) or self.item_embedding_size <= 0:
             raise TypeError(f"item_embedding_size must be positive integer; {self.item_embedding_size!r} is invalid")
+        if not isinstance(self.faiss_index_description, str) or not self.faiss_index_description:
+            raise TypeError(f"faiss_index_description must be non-empty string; {self.faiss_index_description!r} is invalid")
+        if not isinstance(self.faiss_metric_type, str) or not self.faiss_metric_type:
+            raise TypeError(f"faiss_metric_type must be non-empty string; {self.faiss_metric_type!r} is invalid")
+        if not isinstance(getattr(faiss, self.faiss_metric_type, None), int):
+            raise ValueError(f"faiss_metric_type must specify a valid Faiss metric type; {self.faiss_metric_type!r} is invalid")
         if not isinstance(self.item_id_column_name, str) or not self.item_id_column_name:
             raise TypeError(f"item_id_column_name must be non-empty string; {self.item_id_column_name!r} is invalid")
         if self.item_ids_column_indices is not None and (
@@ -292,6 +348,8 @@ class RetrievalHelperMixin(object):
         args['index_building_agent_class'] = self.index_building_agent_class
         args['retrieval_agent_class'] = self.retrieval_agent_class
         args['item_embedding_size'] = self.item_embedding_size
+        args['faiss_index_description'] = self.faiss_index_description
+        args['faiss_metric_type'] = self.faiss_metric_type
         args['item_id_column_name'] = self.item_id_column_name
         args['item_ids_column_indices'] = self.item_ids_column_indices
         args['item_ids_field_delimiter'] = self.item_ids_field_delimiter
