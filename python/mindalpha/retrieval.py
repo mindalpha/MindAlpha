@@ -186,6 +186,9 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
 
     def transform_rec_info(self, rec_info):
         import pyspark.sql.functions as F
+        if self.output_user_embeddings:
+            user_embeddings = rec_info.select(self.increasing_id_column_name,
+                                              self.recommendation_info_column_name + '.user_embedding')
         rec_info = rec_info.withColumn(self.recommendation_info_column_name,
                                        F.arrays_zip(
                                            self.recommendation_info_column_name + '.indices',
@@ -208,6 +211,8 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         rec_info = rec_info.groupBy(self.increasing_id_column_name).agg(
                                      F.max(self.recommendation_info_column_name)
                                       .alias(self.recommendation_info_column_name))
+        if self.output_user_embeddings:
+            rec_info = rec_info.join(user_embeddings, self.increasing_id_column_name)
         return rec_info
 
     def join_rec_info(self, df, rec_info):
@@ -239,7 +244,10 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
 
     def feed_validation_minibatch(self):
         from pyspark.sql.functions import pandas_udf
-        @pandas_udf('indices: array<long>, distances: array<float>')
+        signature = 'indices: array<long>, distances: array<float>'
+        if self.output_user_embeddings:
+            signature += ', user_embedding: array<float>'
+        @pandas_udf(signature)
         def _feed_validation_minibatch(*minibatch):
             self = __class__.get_instance()
             result = self.validate_minibatch(minibatch)
@@ -258,6 +266,8 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         embeddings = predictions.detach().numpy()
         distances, indices = self.faiss_index.search(embeddings, self.retrieval_item_count)
         data = {'indices': list(indices), 'distances': list(distances)}
+        if self.output_user_embeddings:
+            data['user_embedding'] = list(embeddings)
         minibatch_size = len(minibatch[0])
         index = pd.RangeIndex(minibatch_size)
         return pd.DataFrame(data=data, index=index)
@@ -275,8 +285,10 @@ class RetrievalHelperMixin(object):
                  item_ids_field_delimiter='\002',
                  item_ids_value_delimiter='\001',
                  output_item_embeddings=False,
+                 output_user_embeddings=False,
                  increasing_id_column_name='iid',
                  recommendation_info_column_name='rec_info',
+                 user_embedding_column_name='user_embedding',
                  retrieval_item_count=10,
                  **kwargs):
         super().__init__(**kwargs)
@@ -291,8 +303,10 @@ class RetrievalHelperMixin(object):
         self.item_ids_field_delimiter = item_ids_field_delimiter
         self.item_ids_value_delimiter = item_ids_value_delimiter
         self.output_item_embeddings = output_item_embeddings
+        self.output_user_embeddings = output_user_embeddings
         self.increasing_id_column_name = increasing_id_column_name
         self.recommendation_info_column_name = recommendation_info_column_name
+        self.user_embedding_column_name = user_embedding_column_name
         self.retrieval_item_count = retrieval_item_count
         self.extra_agent_attributes['item_embedding_size'] = self.item_embedding_size
         self.extra_agent_attributes['faiss_index_description'] = self.faiss_index_description
@@ -302,8 +316,10 @@ class RetrievalHelperMixin(object):
         self.extra_agent_attributes['item_ids_field_delimiter'] = self.item_ids_field_delimiter
         self.extra_agent_attributes['item_ids_value_delimiter'] = self.item_ids_value_delimiter
         self.extra_agent_attributes['output_item_embeddings'] = self.output_item_embeddings
+        self.extra_agent_attributes['output_user_embeddings'] = self.output_user_embeddings
         self.extra_agent_attributes['increasing_id_column_name'] = self.increasing_id_column_name
         self.extra_agent_attributes['recommendation_info_column_name'] = self.recommendation_info_column_name
+        self.extra_agent_attributes['user_embedding_column_name'] = self.user_embedding_column_name
         self.extra_agent_attributes['retrieval_item_count'] = self.retrieval_item_count
 
     def _check_properties(self):
@@ -339,6 +355,8 @@ class RetrievalHelperMixin(object):
             raise TypeError(f"increasing_id_column_name must be non-empty string; {self.increasing_id_column_name!r} is invalid")
         if not isinstance(self.recommendation_info_column_name, str) or not self.recommendation_info_column_name:
             raise TypeError(f"recommendation_info_column_name must be non-empty string; {self.recommendation_info_column_name!r} is invalid")
+        if not isinstance(self.user_embedding_column_name, str) or not self.user_embedding_column_name:
+            raise TypeError(f"user_embedding_column_name must be non-empty string; {self.user_embedding_column_name!r} is invalid")
         if not isinstance(self.retrieval_item_count, int) or self.retrieval_item_count <= 0:
             raise TypeError(f"retrieval_item_count must be positive integer; {self.retrieval_item_count!r} is invalid")
 
@@ -355,8 +373,10 @@ class RetrievalHelperMixin(object):
         args['item_ids_field_delimiter'] = self.item_ids_field_delimiter
         args['item_ids_value_delimiter'] = self.item_ids_value_delimiter
         args['output_item_embeddings'] = self.output_item_embeddings
+        args['output_user_embeddings'] = self.output_user_embeddings
         args['increasing_id_column_name'] = self.increasing_id_column_name
         args['recommendation_info_column_name'] = self.recommendation_info_column_name
+        args['user_embedding_column_name'] = self.user_embedding_column_name
         args['retrieval_item_count'] = self.retrieval_item_count
         return args
 
