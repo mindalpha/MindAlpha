@@ -188,61 +188,15 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
             df = df.withColumn('item_embedding', F.split(F.col('item_embedding'), ',').cast('array<float>'))
         return df
 
-    def transform_rec_info(self, rec_info):
-        import pyspark.sql.functions as F
-        if self.output_user_embeddings:
-            user_embeddings = rec_info.select(self.increasing_id_column_name,
-                                              self.recommendation_info_column_name + '.user_embedding')
-        rec_info = rec_info.withColumn(self.recommendation_info_column_name,
-                                       F.arrays_zip(
-                                           self.recommendation_info_column_name + '.indices',
-                                           self.recommendation_info_column_name + '.distances'))
-        rec_info = rec_info.select(self.increasing_id_column_name,
-                                   (F.posexplode(self.recommendation_info_column_name)
-                                     .alias('pos', self.recommendation_info_column_name)))
-        rec_info = rec_info.select(self.increasing_id_column_name,
-                                   'pos',
-                                   F.col(self.recommendation_info_column_name + '.0').alias('index'),
-                                   F.col(self.recommendation_info_column_name + '.1').alias('distance'))
-        rec_info = rec_info.join(self.item_ids_dataset, F.col('index') == F.col('id'))
-        w = pyspark.sql.Window.partitionBy(self.increasing_id_column_name).orderBy('pos')
-        if self.output_item_embeddings:
-            rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
-                                       (F.struct('name', 'distance', 'item_embedding')
-                                         .alias(self.recommendation_info_column_name)))
-        else:
-            rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
-                                       (F.struct('name', 'distance')
-                                         .alias(self.recommendation_info_column_name)))
-        rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
-                                   (F.collect_list(self.recommendation_info_column_name)
-                                    .over(w).alias(self.recommendation_info_column_name)))
-        rec_info = rec_info.groupBy(self.increasing_id_column_name).agg(
-                                     F.max(self.recommendation_info_column_name)
-                                      .alias(self.recommendation_info_column_name))
-        if self.output_user_embeddings:
-            rec_info = rec_info.join(user_embeddings, self.increasing_id_column_name)
-        return rec_info
-
-    def join_rec_info(self, df, rec_info):
-        df = df.join(rec_info, self.increasing_id_column_name)
-        df = df.orderBy(self.increasing_id_column_name)
-        df = df.drop(self.increasing_id_column_name)
-        return df
-
     def feed_validation_dataset(self):
         import pyspark.sql.functions as F
         self.item_ids_dataset = self.load_item_ids()
-        df = self.dataset.withColumn(self.increasing_id_column_name,
-                                     F.monotonically_increasing_id())
-        rec_info = df.select(self.increasing_id_column_name,
-                             (self.feed_validation_minibatch()(*self.dataset.columns)
-                                  .alias(self.recommendation_info_column_name)))
-        # Save intermediate validation result here to separate
-        # the execution of PS and Spark SQL.
-        rec_info.cache()
-        rec_info = self.transform_rec_info(rec_info)
-        df = self.join_rec_info(df, rec_info)
+        dataset = self.dataset.withColumn(self.increasing_id_column_name,
+                                          F.monotonically_increasing_id())
+        df = dataset.select(self.increasing_id_column_name,
+                            (self.feed_validation_minibatch()(*self.dataset.columns)
+                             .alias(self.recommendation_info_column_name)))
+        self.dataset = dataset
         self.validation_result = df
         # PySpark DataFrame & RDD is lazily evaluated.
         # We must call ``cache`` here otherwise PySpark will try to reevaluate
@@ -401,6 +355,48 @@ class RetrievalHelperMixin(object):
                     mod.reload_combine_schema(True)
 
 class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
+    def _transform_rec_info(self, rec_info, item_ids_dataset):
+        import pyspark.sql.functions as F
+        if self.output_user_embeddings:
+            user_embeddings = rec_info.select(self.increasing_id_column_name,
+                                              self.recommendation_info_column_name + '.user_embedding')
+        rec_info = rec_info.withColumn(self.recommendation_info_column_name,
+                                       F.arrays_zip(
+                                           self.recommendation_info_column_name + '.indices',
+                                           self.recommendation_info_column_name + '.distances'))
+        rec_info = rec_info.select(self.increasing_id_column_name,
+                                   (F.posexplode(self.recommendation_info_column_name)
+                                     .alias('pos', self.recommendation_info_column_name)))
+        rec_info = rec_info.select(self.increasing_id_column_name,
+                                   'pos',
+                                   F.col(self.recommendation_info_column_name + '.0').alias('index'),
+                                   F.col(self.recommendation_info_column_name + '.1').alias('distance'))
+        rec_info = rec_info.join(item_ids_dataset, F.col('index') == F.col('id'))
+        w = pyspark.sql.Window.partitionBy(self.increasing_id_column_name).orderBy('pos')
+        if self.output_item_embeddings:
+            rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
+                                       (F.struct('name', 'distance', 'item_embedding')
+                                         .alias(self.recommendation_info_column_name)))
+        else:
+            rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
+                                       (F.struct('name', 'distance')
+                                         .alias(self.recommendation_info_column_name)))
+        rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
+                                   (F.collect_list(self.recommendation_info_column_name)
+                                    .over(w).alias(self.recommendation_info_column_name)))
+        rec_info = rec_info.groupBy(self.increasing_id_column_name).agg(
+                                    F.max(self.recommendation_info_column_name)
+                                     .alias(self.recommendation_info_column_name))
+        if self.output_user_embeddings:
+            rec_info = rec_info.join(user_embeddings, self.increasing_id_column_name)
+        return rec_info
+
+    def _join_rec_info(self, df, rec_info):
+        df = df.join(rec_info, self.increasing_id_column_name)
+        df = df.orderBy(self.increasing_id_column_name)
+        df = df.drop(self.increasing_id_column_name)
+        return df
+
     def _transform(self, dataset):
         self._reload_combine_schemas(self.module)
         launcher = self._create_launcher(dataset, False)
@@ -408,7 +404,11 @@ class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
         launcher.tensor_name_prefix = '_user_module.'
         launcher.agent_class = self.retrieval_agent_class or FaissIndexRetrievalAgent
         launcher.launch()
-        result = launcher.agent_object.validation_result
+        df = launcher.agent_object.dataset
+        rec_info = launcher.agent_object.validation_result
+        item_ids_dataset = launcher.agent_object.item_ids_dataset
+        rec_info = self._transform_rec_info(rec_info, item_ids_dataset)
+        result = self._join_rec_info(df, rec_info)
         self.final_metric = launcher.agent_object._metric
         return result
 
