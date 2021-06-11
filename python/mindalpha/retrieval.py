@@ -109,7 +109,7 @@ class FaissIndexBuildingAgent(PyTorchAgent):
                 ids_data += self.item_ids_field_delimiter
                 for k, value in enumerate(embeddings[i]):
                     if k > 0:
-                        ids_data += self.item_ids_value_delimiter
+                        ids_data += ','
                     ids_data += str(value)
             ids_data += '\n'
         ids_data = ids_data.encode('utf-8')
@@ -178,10 +178,14 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
 
     def load_item_ids(self):
         from .input import read_s3_csv
+        import pyspark.sql.functions as F
         item_ids_input_dir = '%sfaiss/item_ids/' % self.model_in_path
         item_ids_input_path = '%s*' % item_ids_input_dir
         df = read_s3_csv(self.spark_session, item_ids_input_path, delimiter=self.item_ids_field_delimiter)
         df = df.withColumnRenamed('_c0', 'id').withColumnRenamed('_c1', 'name')
+        if self.output_item_embeddings:
+            df = df.withColumnRenamed('_c2', 'item_embedding')
+            df = df.withColumn('item_embedding', F.split(F.col('item_embedding'), ',').cast('array<float>'))
         return df
 
     def transform_rec_info(self, rec_info):
@@ -202,9 +206,14 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
                                    F.col(self.recommendation_info_column_name + '.1').alias('distance'))
         rec_info = rec_info.join(self.item_ids_dataset, F.col('index') == F.col('id'))
         w = pyspark.sql.Window.partitionBy(self.increasing_id_column_name).orderBy('pos')
-        rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
-                                   (F.struct('name', 'distance')
-                                     .alias(self.recommendation_info_column_name)))
+        if self.output_item_embeddings:
+            rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
+                                       (F.struct('name', 'distance', 'item_embedding')
+                                         .alias(self.recommendation_info_column_name)))
+        else:
+            rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
+                                       (F.struct('name', 'distance')
+                                         .alias(self.recommendation_info_column_name)))
         rec_info = rec_info.select(self.increasing_id_column_name, 'pos',
                                    (F.collect_list(self.recommendation_info_column_name)
                                     .over(w).alias(self.recommendation_info_column_name)))
