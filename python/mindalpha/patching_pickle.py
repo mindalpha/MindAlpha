@@ -64,10 +64,17 @@ class SourcePatchingPickler(cloudpickle.CloudPickler):
         setattr(forward_method, '_SourcePatchingPickler__sourcelines', sourcelines)
         setattr(forward_method, '_SourcePatchingPickler__file_lineno', file_lineno)
 
-    def reducer_override(self, obj):
-        if isinstance(obj, type) and issubclass(obj, torch.nn.Module):
-            self._patch_source(obj)
-        return super().reducer_override(obj)
+    if pickle.HIGHEST_PROTOCOL >= 5 and not PYPY:
+        def reducer_override(self, obj):
+            if isinstance(obj, type) and issubclass(obj, torch.nn.Module):
+                self._patch_source(obj)
+            return super().reducer_override(obj)
+
+    else:
+        def save(self, obj, save_persistent_id=True):
+            if isinstance(obj, type) and issubclass(obj, torch.nn.Module):
+                self._patch_source(obj)
+            super().save(obj, save_persistent_id=save_persistent_id)
 
 if pickle.HIGHEST_PROTOCOL >= 5 and not PYPY:
     def dump(obj, file, protocol=None, buffer_callback=None):
