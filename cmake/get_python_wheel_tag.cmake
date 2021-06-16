@@ -24,7 +24,7 @@ function(get_python_wheel_tag var)
     string(APPEND src "print('cp%s-cp%sm%s-linux_x86_64' % ")
     string(APPEND src "(ver, ver, flag))")
     execute_process(
-        COMMAND ${PYTHON_EXECUTABLE} -c "${src}"
+        COMMAND ${Python_EXECUTABLE} -c "${src}"
         RESULT_VARIABLE rc
         OUTPUT_VARIABLE wheel_tag)
     if(NOT "${rc}" STREQUAL "0" OR "${wheel_tag}" STREQUAL "")
