@@ -413,23 +413,32 @@ class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
         return result
 
     def stringify(self, result,
-                  item_embedding_field_delimiter="\004",
+                  recommendation_info_item_delimiter="\001",
+                  recommendation_info_field_delimiter="\004",
                   item_embedding_value_delimiter="\003",
-                  user_embedding_value_delimiter="\003",
-                  recommendation_info_item_delimiter="\001"):
+                  user_embedding_value_delimiter="\003"):
         import pyspark.sql.functions as F
-        if self.output_item_embeddings:
-            def format_rec_info_item(item):
-                vec = F.array_join(item['item_embedding'], item_embedding_value_delimiter)
-                return F.concat(item['name'], F.lit(item_embedding_field_delimiter),
-                                item['distance'], F.lit(item_embedding_field_delimiter), vec)
-        else:
-            def format_rec_info_item(item):
-                return F.concat(item['name'], F.lit(item_embedding_field_delimiter),
-                                item['distance'], F.lit(item_embedding_field_delimiter))
+        from pyspark.sql.functions import pandas_udf
+        output_item_embeddings = self.output_item_embeddings
+        @pandas_udf('string')
+        def format_rec_info(rec_info):
+            import pandas as pd
+            output = []
+            for record in rec_info:
+                string = ''
+                for item in record:
+                    if string:
+                        string += recommendation_info_item_delimiter
+                    string += item['name']
+                    string += recommendation_info_field_delimiter
+                    string += str(item['distance'])
+                    if output_item_embeddings:
+                        string += recommendation_info_field_delimiter
+                        string += item_embedding_value_delimiter.join(map(str, item['item_embedding']))
+                output.append(string)
+            return pd.Series(output)
         result = result.withColumn(self.recommendation_info_column_name,
-                                   F.array_join(F.transform(F.col(self.recommendation_info_column_name), format_rec_info_item),
-                                                recommendation_info_item_delimiter))
+                                   format_rec_info(self.recommendation_info_column_name))
         if self.output_user_embeddings:
             result = result.withColumn(self.user_embedding_column_name,
                                        F.array_join(F.col(self.user_embedding_column_name),
