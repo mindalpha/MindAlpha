@@ -75,6 +75,7 @@ del get_mindalpha_version
 
 from . import nn
 from . import input
+from . import output
 from . import spark
 from . import patching_pickle
 from . import demo

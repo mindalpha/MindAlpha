@@ -412,6 +412,30 @@ class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
         self.final_metric = launcher.agent_object._metric
         return result
 
+    def stringify(self, result,
+                  item_embedding_field_delimiter="\004",
+                  item_embedding_value_delimiter="\003",
+                  user_embedding_value_delimiter="\003",
+                  recommendation_info_item_delimiter="\001"):
+        import pyspark.sql.functions as F
+        if self.output_item_embeddings:
+            def format_rec_info_item(item):
+                vec = F.array_join(item['item_embedding'], item_embedding_value_delimiter)
+                return F.concat(item['name'], F.lit(item_embedding_field_delimiter),
+                                item['distance'], F.lit(item_embedding_field_delimiter), vec)
+        else:
+            def format_rec_info_item(item):
+                return F.concat(item['name'], F.lit(item_embedding_field_delimiter),
+                                item['distance'], F.lit(item_embedding_field_delimiter))
+        result = result.withColumn(self.recommendation_info_column_name,
+                                   F.array_join(F.transform(F.col(self.recommendation_info_column_name), format_rec_info_item),
+                                                recommendation_info_item_delimiter))
+        if self.output_user_embeddings:
+            result = result.withColumn(self.user_embedding_column_name,
+                                       F.array_join(F.col(self.user_embedding_column_name),
+                                                    user_embedding_value_delimiter))
+        return result
+
 class RetrievalEstimator(RetrievalHelperMixin, PyTorchEstimator):
     def _check_properties(self):
         super()._check_properties()

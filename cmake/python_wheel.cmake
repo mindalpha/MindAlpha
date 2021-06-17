@@ -34,6 +34,7 @@ set(python_files
     python/mindalpha/embedding.py
     python/mindalpha/cast.py
     python/mindalpha/input.py
+    python/mindalpha/output.py
     python/mindalpha/url_utils.py
     python/mindalpha/s3_utils.py
     python/mindalpha/file_utils.py
