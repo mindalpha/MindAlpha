@@ -23,22 +23,34 @@ def parse_s3_url(s3_url):
     path = r.path.lstrip('/')
     return r.netloc, path
 
-def get_s3_client():
+def parse_s3_dir_url(s3_url):
+    bucket, path = parse_s3_url(s3_url)
+    if not path.endswith('/'):
+        path += '/'
+    return bucket, path
+
+def get_aws_endpoint():
     import os
-    import boto3
     endpoint = os.environ.get('AWS_ENDPOINT')
-    if endpoint is None:
-        s3 = boto3.client('s3')
-    else:
+    if endpoint is not None:
         if not endpoint.startswith('http://') and not endpoint.startswith('https://'):
             endpoint = 'http://' + endpoint
-        s3 = boto3.client('s3', endpoint_url=endpoint)
+    return endpoint
+
+def get_s3_client():
+    import boto3
+    endpoint = get_aws_endpoint()
+    s3 = boto3.client('s3', endpoint_url=endpoint)
+    return s3
+
+def get_s3_resource():
+    import boto3
+    endpoint = get_aws_endpoint()
+    s3 = boto3.resource('s3', endpoint_url=endpoint)
     return s3
 
 def get_s3_dir_size(dir_path):
-    bucket, path = parse_s3_url(dir_path)
-    if not path.endswith('/'):
-        path += '/'
+    bucket, path = parse_s3_dir_url(dir_path)
     s3 = get_s3_client()
     objs = s3.list_objects(Bucket=bucket, Prefix=path)
     size = 0
@@ -56,3 +68,13 @@ def s3_file_exists(file_path):
         return False
     else:
         return True
+
+def delete_s3_dir(dir_path):
+    bucket, path = parse_s3_dir_url(dir_path)
+    s3 = get_s3_resource()
+    s3.Bucket(bucket).objects.filter(Prefix=path).delete()
+
+def delete_s3_file(file_path):
+    bucket, path = parse_s3_url(file_path)
+    s3 = get_s3_resource()
+    s3.Object(bucket, path).delete()

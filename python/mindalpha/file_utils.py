@@ -29,3 +29,22 @@ def dir_exists(url):
         return get_s3_dir_size(url) > 0
     else:
         return os.path.isdir(url)
+
+def delete_dir(url):
+    import os
+    import shutil
+    from .s3_utils import delete_s3_dir
+    if url.startswith('s3://') or url.startswith('s3a://'):
+        delete_s3_dir(url)
+    else:
+        if os.path.isdir(url):
+            shutil.rmtree(url)
+
+def delete_file(url):
+    import os
+    from .s3_utils import delete_s3_file
+    if url.startswith('s3://') or url.startswith('s3a://'):
+        delete_s3_file(url)
+    else:
+        if os.path.isfile(url):
+            os.remove(url)

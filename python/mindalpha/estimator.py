@@ -24,6 +24,7 @@ from .updater import TensorUpdater
 from .updater import AdamTensorUpdater
 from .distributed_trainer import DistributedTrainer
 from .file_utils import dir_exists
+from .file_utils import delete_dir
 from .ps_launcher import PSLauncher
 
 class PyTorchAgent(Agent):
@@ -525,7 +526,13 @@ class PyTorchEstimator(PyTorchHelperMixin, pyspark.ml.base.Estimator):
             # Later, we may refine the implementation of PS to remove this limitation.
             raise RuntimeError("model_out_path of estimator must be specified")
 
+    def _clear_output(self):
+        delete_dir(self.model_out_path)
+        if self.model_export_path is not None:
+            delete_dir(self.model_export_path)
+
     def _fit(self, dataset):
+        self._clear_output()
         launcher = self._create_launcher(dataset, True)
         launcher.launch()
         module = launcher.agent_object.module

@@ -469,6 +469,7 @@ class RetrievalEstimator(RetrievalHelperMixin, PyTorchEstimator):
             subprocess.check_call(args)
 
     def _fit(self, dataset):
+        self._clear_output()
         launcher = self._create_launcher(dataset, True)
         launcher.model_export_selector = lambda m: m.user_module, '_user_module.'
         launcher.launch()
