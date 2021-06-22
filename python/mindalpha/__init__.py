@@ -47,6 +47,16 @@ from .experiment import Experiment
 try:
     import pyspark
 except ImportError:
+    # Use findspark to simplify running job locally.
+    try:
+        import findspark
+        findspark.init()
+    except:
+        pass
+
+try:
+    import pyspark
+except ImportError:
     pass
 else:
     # PySpark may not be available at this point,
