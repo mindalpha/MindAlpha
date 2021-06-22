@@ -78,3 +78,38 @@ def delete_s3_file(file_path):
     bucket, path = parse_s3_url(file_path)
     s3 = get_s3_resource()
     s3.Object(bucket, path).delete()
+
+def copy_s3_dir(src_dir_path, dst_dir_path):
+    src_bucket, src_dir = parse_s3_dir_url(src_dir_path)
+    dst_bucket, dst_dir = parse_s3_dir_url(dst_dir_path)
+    s3 = get_s3_resource()
+    bucket = s3.Bucket(dst_bucket)
+    for item in s3.Bucket(src_bucket).objects.filter(Prefix=src_dir):
+        src = { 'Bucket' : item.bucket_name, 'Key' : item.key }
+        dst = dst_dir + item.key[len(src_dir):]
+        bucket.copy(src, dst)
+
+def download_s3_dir(src_dir_path, dst_dir_path):
+    import os
+    from . import _mindalpha
+    src_bucket, src_dir = parse_s3_dir_url(src_dir_path)
+    s3 = get_s3_resource()
+    bucket = s3.Bucket(src_bucket)
+    for item in bucket.objects.filter(Prefix=src_dir):
+        src = item.key
+        dst = os.path.join(dst_dir_path, item.key[len(src_dir):])
+        _mindalpha.ensure_local_directory(os.path.dirname(dst))
+        bucket.download_file(src, dst)
+
+def upload_s3_dir(src_dir_path, dst_dir_path):
+    import os
+    if not src_dir_path.endswith('/'):
+        src_dir_path += '/'
+    dst_bucket, dst_dir = parse_s3_dir_url(dst_dir_path)
+    s3 = get_s3_resource()
+    bucket = s3.Bucket(dst_bucket)
+    for dirpath, dirnames, filenames in os.walk(src_dir_path):
+        for filename in filenames:
+            src = os.path.join(dirpath, filename)
+            dst = dst_dir + src[len(src_dir_path):]
+            bucket.upload_file(src, dst)

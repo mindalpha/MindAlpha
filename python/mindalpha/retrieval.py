@@ -61,7 +61,7 @@ class FaissIndexBuildingAgent(PyTorchAgent):
         self.setup_faiss_index()
 
     def setup_faiss_index(self):
-        from mindalpha.url_utils import use_s3
+        from .url_utils import use_s3
         self.item_index_output_dir = use_s3('%sfaiss/item_index/' % self.model_in_path)
         self.item_index_output_path = '%spart_%d_%d.dat' % (self.item_index_output_dir, self.worker_count, self.rank)
         self.item_ids_output_dir = use_s3('%sfaiss/item_ids/' % self.model_in_path)
@@ -150,7 +150,7 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         self.load_faiss_index()
 
     def get_index_meta(self):
-        from mindalpha.url_utils import use_s3
+        from .url_utils import use_s3
         index_meta_input_dir = use_s3('%sfaiss/' % self.model_in_path)
         index_meta_input_path = '%sindex_meta.json' % index_meta_input_dir
         data = _mindalpha.stream_read_all(index_meta_input_path)
@@ -164,7 +164,7 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         return partition_count
 
     def load_faiss_index(self):
-        from mindalpha.url_utils import use_s3
+        from .url_utils import use_s3
         item_index_input_dir = use_s3('%sfaiss/item_index/' % self.model_in_path)
         self.faiss_index = faiss.IndexShards(self.item_embedding_size, True, False)
         partition_count = self.get_partition_count()
@@ -457,16 +457,11 @@ class RetrievalEstimator(RetrievalHelperMixin, PyTorchEstimator):
 
     def _copy_faiss_index(self):
         if self.model_export_path is not None:
-            import subprocess
-            from mindalpha.url_utils import use_s3
+            from .url_utils import use_s3
+            from .file_utils import copy_dir
             src_path = use_s3('%sfaiss/' % self.model_out_path)
             dst_path = use_s3('%s%s.ptm.msd/faiss/' % (self.model_export_path, self.experiment_name))
-            if src_path.startswith('s3://') or dst_path.startswith('s3://'):
-                args = 'aws', 's3', 'cp'
-            else:
-                args = 'cp',
-            args += '--recursive', src_path, dst_path
-            subprocess.check_call(args)
+            copy_dir(src_path, dst_path)
 
     def _fit(self, dataset):
         self._clear_output()
