@@ -32,6 +32,8 @@ class TensorInitializer(abc.ABC):
         raise NotImplementedError
 
     def __call__(self, name, data, keys):
+        if data.size == 0:
+            return
         data = torch.from_numpy(data)
         if keys is None:
             self.initialize_dense(name=name, data=data)
