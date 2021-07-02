@@ -527,6 +527,11 @@ class EmbeddingSumConcat(EmbeddingOperator):
     def _do_compute(self):
         return self._compute_sum_concat()
 
+    @torch.jit.unused
+    def _clean(self):
+        super()._clean()
+        self._output = torch.zeros((2, self.feature_count * self.embedding_size))
+
 class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
     def _do_combine(self, ndarrays):
@@ -535,3 +540,8 @@ class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
     def _do_compute(self):
         return self._compute_embedding_bag(mode='sum')
+
+    @torch.jit.unused
+    def _clean(self):
+        super()._clean()
+        self._output = torch.zeros((2, self.embedding_size))
