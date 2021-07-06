@@ -119,9 +119,15 @@ class FaissIndexBuildingAgent(PyTorchAgent):
     def get_index_meta(self):
         meta_version = 1
         partition_count = self.worker_count
+        item_ids_field_delimiter = self.item_ids_field_delimiter
+        item_ids_value_delimiter = self.item_ids_value_delimiter
+        output_item_embeddings = self.output_item_embeddings
         meta = {
             'meta_version' : meta_version,
             'partition_count' : partition_count,
+            'item_ids_field_delimiter' : item_ids_field_delimiter,
+            'item_ids_value_delimiter' : item_ids_value_delimiter,
+            'output_item_embeddings' : output_item_embeddings,
         }
         return meta
 
