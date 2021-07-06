@@ -22,8 +22,6 @@ file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha)
 add_custom_command(
     OUTPUT ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_types.h
            ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_types.cpp
-           ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_constants.h
-           ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_constants.cpp
     COMMAND thrift -gen cpp:cob_style,moveable_types
             -out ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha
             ${PROJECT_SOURCE_DIR}/thrift/mindalpha/message_meta.thrift
@@ -75,8 +73,6 @@ add_library(mindalpha_shared SHARED
     cpp/mindalpha/s3_sdk_filesys.cpp
     ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_types.h
     ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_types.cpp
-    ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_constants.h
-    ${PROJECT_BINARY_DIR}/gen/thrift/cpp/mindalpha/message_meta_constants.cpp
     cpp/mindalpha/dense_tensor_meta.cpp
     cpp/mindalpha/dense_tensor_partition.cpp
     cpp/mindalpha/sparse_tensor_meta.cpp
@@ -107,9 +103,11 @@ target_include_directories(mindalpha_shared PRIVATE ${PROJECT_BINARY_DIR}/gen/th
 target_link_libraries(mindalpha_shared PRIVATE
     json11_static
     pybind11::pybind11
+    Python::Module
     aws-cpp-sdk-s3
     aws-cpp-sdk-core
     spdlog::spdlog
-    thrift
-    zmq
+    Boost::headers
+    thrift::thrift
+    zmq::libzmq
 )

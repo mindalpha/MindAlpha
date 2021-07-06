@@ -93,6 +93,8 @@ class TensorUpdater(abc.ABC):
         raise NotImplementedError
 
     def __call__(self, name, param, grad, state, indices, keys):
+        if grad.size == 0:
+            return
         param = torch.from_numpy(param)
         grad = torch.from_numpy(grad)
         if state is not None:

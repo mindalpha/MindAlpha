@@ -36,7 +36,8 @@ class EmbeddingOperator(torch.nn.Module):
                  dtype=torch.float32,
                  requires_grad=True,
                  updater=None,
-                 initializer=None):
+                 initializer=None,
+                 alternative_column_name_file_path=None):
         if embedding_size is not None:
             if not isinstance(embedding_size, int) or embedding_size <= 0:
                 raise TypeError(f"embedding_size must be positive integer; {embedding_size!r} is invalid")
@@ -57,6 +58,9 @@ class EmbeddingOperator(torch.nn.Module):
         if initializer is not None:
             if not isinstance(initializer, TensorInitializer):
                 raise TypeError(f"initializer must be TensorInitializer; {initializer!r} is invalid")
+        if alternative_column_name_file_path is not None:
+            if not isinstance(alternative_column_name_file_path, str) or not file_exists(alternative_column_name_file_path):
+                raise RuntimeError(f"alternative column name file {alternative_column_name_file_path!r} not found")
         super().__init__()
         self._embedding_size = embedding_size
         self._column_name_file_path = column_name_file_path
@@ -66,6 +70,7 @@ class EmbeddingOperator(torch.nn.Module):
         self._requires_grad = requires_grad
         self._updater = updater
         self._initializer = initializer
+        self._alternative_column_name_file_path = alternative_column_name_file_path
         self._distributed_tensor = None
         self._combine_schema_source = None
         self._combine_schema = None
@@ -74,10 +79,13 @@ class EmbeddingOperator(torch.nn.Module):
         self._clean()
 
     @torch.jit.unused
-    def _load_combine_schema(self):
+    def _load_combine_schema(self, use_alternative_column_name_file=False):
         if self._combine_schema is not None:
             raise RuntimeError("combine schema has been loaded")
-        column_name_file_path = self._checked_get_column_name_file_path()
+        if use_alternative_column_name_file:
+            column_name_file_path = self._checked_get_alternative_column_name_file_path()
+        else:
+            column_name_file_path = self._checked_get_column_name_file_path()
         combine_schema_file_path = self._checked_get_combine_schema_file_path()
         self._combine_schema = CombineSchema()
         self._combine_schema.load_column_name_from_file(use_s3(column_name_file_path))
@@ -87,6 +95,13 @@ class EmbeddingOperator(torch.nn.Module):
         string += f"\033[32mcolumn name file \033[m{column_name_file_path!r} "
         string += f"\033[32mand combine schema file \033[m{combine_schema_file_path!r}"
         print(string)
+
+    @torch.jit.unused
+    def reload_combine_schema(self, use_alternative_column_name_file=False):
+        if use_alternative_column_name_file and self._alternative_column_name_file_path is None:
+            raise RuntimeError("alternative_column_name_file_path is not set")
+        self._combine_schema = None
+        self._load_combine_schema(use_alternative_column_name_file)
 
     @torch.jit.unused
     def _ensure_combine_schema_loaded(self):
@@ -107,6 +122,12 @@ class EmbeddingOperator(torch.nn.Module):
             args.append(f"dtype={self._dtype}")
         if not self._requires_grad:
             args.append("requires_grad=False")
+        if self._updater is not None:
+            args.append(f"updater={self._updater!r}")
+        if self._initializer is not None:
+            args.append(f"initializer={self._initializer!r}")
+        if self._alternative_column_name_file_path is not None:
+            args.append(f"alternative_column_name_file_path={self._alternative_column_name_file_path!r}")
         return f"{self.__class__.__name__}({', '.join(args)})"
 
     @property
@@ -150,6 +171,32 @@ class EmbeddingOperator(torch.nn.Module):
         if self._column_name_file_path is None:
             raise RuntimeError("column_name_file_path is not set")
         return self._column_name_file_path
+
+    @property
+    @torch.jit.unused
+    def has_alternative_column_name_file_path(self):
+        return self._alternative_column_name_file_path is not None
+
+    @property
+    @torch.jit.unused
+    def alternative_column_name_file_path(self):
+        return self._alternative_column_name_file_path
+
+    @alternative_column_name_file_path.setter
+    @torch.jit.unused
+    def alternative_column_name_file_path(self, value):
+        if value is not None:
+            if not isinstance(value, str) or not file_exists(value):
+                raise RuntimeError(f"alternative column name file {value!r} not found")
+        if self._alternative_column_name_file_path is not None:
+            raise RuntimeError(f"can not reset alternative_column_name_file_path {self._alternative_column_name_file_path!r} to {value!r}")
+        self._alternative_column_name_file_path = value
+
+    @torch.jit.unused
+    def _checked_get_alternative_column_name_file_path(self):
+        if self._alternative_column_name_file_path is None:
+            raise RuntimeError("alternative_column_name_file_path is not set")
+        return self._alternative_column_name_file_path
 
     @property
     @torch.jit.unused
@@ -480,6 +527,11 @@ class EmbeddingSumConcat(EmbeddingOperator):
     def _do_compute(self):
         return self._compute_sum_concat()
 
+    @torch.jit.unused
+    def _clean(self):
+        super()._clean()
+        self._output = torch.zeros((2, self.feature_count * self.embedding_size))
+
 class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
     def _do_combine(self, ndarrays):
@@ -488,3 +540,8 @@ class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
     def _do_compute(self):
         return self._compute_embedding_bag(mode='sum')
+
+    @torch.jit.unused
+    def _clean(self):
+        super()._clean()
+        self._output = torch.zeros((2, self.embedding_size))

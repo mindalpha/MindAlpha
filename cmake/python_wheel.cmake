@@ -34,6 +34,7 @@ set(python_files
     python/mindalpha/embedding.py
     python/mindalpha/cast.py
     python/mindalpha/input.py
+    python/mindalpha/output.py
     python/mindalpha/url_utils.py
     python/mindalpha/s3_utils.py
     python/mindalpha/file_utils.py
@@ -44,6 +45,7 @@ set(python_files
     python/mindalpha/ps_launcher.py
     python/mindalpha/job_utils.py
     python/mindalpha/estimator.py
+    python/mindalpha/retrieval.py
     python/mindalpha/experiment.py
     python/mindalpha/spark.py
     python/mindalpha/patching_pickle.py
@@ -51,7 +53,7 @@ set(python_files
 add_custom_command(OUTPUT ${wheel_file_name}
                    COMMAND env _MINDALPHA_SO=${PROJECT_BINARY_DIR}/_mindalpha.so
                                _MINDALPHA_VERSION=${project_version}
-                           ${PYTHON_EXECUTABLE} -m pip wheel ${PROJECT_SOURCE_DIR}/python
+                           ${Python_EXECUTABLE} -m pip wheel ${PROJECT_SOURCE_DIR}/python
                    MAIN_DEPENDENCY python/setup.py
                    DEPENDS mindalpha_shared ${python_files})
 add_custom_target(python_wheel ALL DEPENDS ${wheel_file_name})

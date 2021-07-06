@@ -29,9 +29,10 @@ from .updater import EMATensorUpdater
 from .embedding import EmbeddingOperator
 from .cast import Cast
 from .distributed_tensor import DistributedTensor
+from .url_utils import use_s3
 
 class Model(object):
-    def __init__(self, agent, module, experiment_name=None, model_version=None):
+    def __init__(self, agent, module, experiment_name=None, model_version=None, name_prefix=None):
         if not isinstance(agent, Agent):
             raise TypeError(f"agent must be Agent; {agent!r} is invalid")
         if not isinstance(module, torch.nn.Module):
@@ -44,10 +45,14 @@ class Model(object):
             if not isinstance(model_version, str):
                 raise TypeError(f"model_version must be string; {model_version!r} is invalid")
             model_version = model_version.strip()
+        if name_prefix is not None:
+            if not isinstance(name_prefix, str):
+                raise TypeError(f"name_prefix must be string; {name_prefix!r} is invalid")
         self._agent = agent
         self._module = module
         self._experiment_name = experiment_name
         self._model_version = model_version
+        self._name_prefix = name_prefix
         self._tensors = []
 
     @property
@@ -90,6 +95,19 @@ class Model(object):
         if self._model_version is not None:
             raise RuntimeError(f"can not reset model_version {self._model_version!r} to {value!r}")
         self._model_version = value
+
+    @property
+    def name_prefix(self):
+        return self._name_prefix
+
+    @name_prefix.setter
+    def name_prefix(self, value):
+        if value is not None:
+            if not isinstance(value, str):
+                raise TypeError(f"name_prefix must be string; {value!r} is invalid")
+        if self._name_prefix is not None:
+            raise RuntimeError(f"can not reset name_prefix {self._name_prefix!r} to {value!r}")
+        self._name_prefix = value
 
     @property
     def training(self):
@@ -139,8 +157,8 @@ class Model(object):
         if running_mean is None and running_var is None:
             return
         if running_mean is not None and running_var is not None:
-            tensor1 = DistributedTensor(running_mean_name, running_mean)
-            tensor2 = DistributedTensor(running_var_name, running_var)
+            tensor1 = DistributedTensor(running_mean_name, running_mean, self.name_prefix)
+            tensor2 = DistributedTensor(running_var_name, running_var, self.name_prefix)
             self._tensors.append(tensor1)
             self._tensors.append(tensor2)
             return
@@ -164,7 +182,7 @@ class Model(object):
 
     def _collect_dense_parameters(self):
         for name, param in self.module.named_parameters():
-            tensor = DistributedTensor(name, param)
+            tensor = DistributedTensor(name, param, self.name_prefix)
             self._tensors.append(tensor)
 
     def _collect_dense_buffers(self):
@@ -234,12 +252,16 @@ class Model(object):
         ver = time.strftime('%Y%m%d%H', tm)
         return ver
 
-    def _get_export_meta(self, path):
+    def _get_export_meta(self, path, *, model_export_selector=None):
         meta_version = 1
         agent_class = self._get_full_class_name(self.agent)
         model_class = self._get_full_class_name(self)
         model_version = self._get_model_version()
-        module_class = self._get_full_class_name(self.module)
+        module = self.module
+        if model_export_selector is not None:
+            func, name_prefix_ = model_export_selector
+            module = func(module)
+        module_class = self._get_full_class_name(module)
         module_file = os.path.basename(path)
         experiment_name = self._checked_get_experiment_name()
         meta = {
@@ -260,22 +282,26 @@ class Model(object):
         string = json.dumps(obj, separators=(',', ': '), indent=4)
         return string
 
-    def _do_export(self, path):
-        meta = self._get_export_meta(path)
+    def _do_export(self, path, *, model_export_selector=None):
+        meta = self._get_export_meta(path, model_export_selector=model_export_selector)
         string = self._as_json_string(meta)
-        self.module._meta = string
-        scm = torch.jit.script(self.module)
+        module = self.module
+        if model_export_selector is not None:
+            func, name_prefix_ = model_export_selector
+            module = func(module)
+        module._meta = string
+        scm = torch.jit.script(module)
         dir_path = os.path.dirname(path)
-        _mindalpha.ensure_local_directory(dir_path)
+        _mindalpha.ensure_local_directory(use_s3(dir_path))
         class FakeStream(object):
             def write(self, data):
-                _mindalpha.stream_write_all(path, data)
+                _mindalpha.stream_write_all(use_s3(path), data)
         fout = FakeStream()
         torch.jit.save(scm, fout)
         data = (string + '\n').encode('utf-8')
-        _mindalpha.stream_write_all(path + '.json', data)
+        _mindalpha.stream_write_all(use_s3(path + '.json'), data)
 
-    def export(self, path):
+    def export(self, path, *, model_export_selector=None):
         if not isinstance(path, str) or not path.strip():
             raise TypeError(f"path must be non-empty string; {path!r} is invalid")
         path = path.strip()
@@ -298,7 +324,7 @@ class Model(object):
         self.agent.barrier()
         asyncio.run(self._pull_tensors(force_mode=True))
         if self.agent.rank == 0:
-            self._do_export(path)
+            self._do_export(path, model_export_selector=model_export_selector)
         self.agent.barrier()
 
     def sync(self):
@@ -331,23 +357,23 @@ class Model(object):
         return False
 
     @classmethod
-    def wrap(cls, agent, module):
+    def wrap(cls, agent, module, experiment_name=None, model_version=None, name_prefix=None):
         if (cls._contains_embedding_operators(module) or
             cls._contains_cast_operators(module)):
-            return SparseModel(agent, module)
+            return SparseModel(agent, module, experiment_name, model_version, name_prefix)
         else:
-            return Model(agent, module)
+            return Model(agent, module, experiment_name, model_version, name_prefix)
 
 class SparseModel(Model):
-    def __init__(self, agent, module, experiment_name=None):
-        super().__init__(agent, module, experiment_name)
+    def __init__(self, agent, module, experiment_name=None, model_version=None, name_prefix=None):
+        super().__init__(agent, module, experiment_name, model_version, name_prefix)
         self._embedding_operators = []
         self._cast_operators = []
 
     def _collect_embedding_operators(self):
         for name, mod in self.module.named_modules():
             if isinstance(mod, EmbeddingOperator):
-                tensor = DistributedTensor(name, mod)
+                tensor = DistributedTensor(name, mod, self.name_prefix)
                 self._tensors.append(tensor)
                 self._embedding_operators.append(tensor)
                 mod._distributed_tensor = tensor
@@ -364,15 +390,28 @@ class SparseModel(Model):
             futures.append(future)
         await asyncio.gather(*futures)
 
-    async def _sparse_tensors_export(self, path):
+    async def _sparse_tensors_export(self, path, *, model_export_selector=None):
         futures = []
+        module = self.module
+        name_prefix = None
+        if model_export_selector is not None:
+            func, name_prefix = model_export_selector
+            module = func(module)
+        selected = set(module.modules())
         for tensor in self._embedding_operators:
             # Call the ``_clean()`` method so that intermediate results
             # in the EmbeddingOperator won't be serialized.
             tensor.item._clean()
-            dir_path = path + '.msd/' + tensor.name + '.msm'
-            future = tensor._sparse_tensor_export(dir_path)
-            futures.append(future)
+            if tensor.item in selected:
+                name = tensor.name
+                if name_prefix is not None:
+                    if not name.startswith(name_prefix):
+                        message = f"tensor name {name!r} mismatches with name prefix {name_prefix!r}"
+                        raise RuntimeError(message)
+                    name = name[len(name_prefix):]
+                dir_path = path + '.msd/' + name + '.msm'
+                future = tensor._sparse_tensor_export(dir_path)
+                futures.append(future)
         await asyncio.gather(*futures)
 
     async def _sparse_tensors_prune_small(self, epsilon):
@@ -389,24 +428,36 @@ class SparseModel(Model):
             futures.append(future)
         await asyncio.gather(*futures)
 
-    def _do_export(self, path):
-        asyncio.run(self._sparse_tensors_export(path))
-        super()._do_export(path)
+    def _do_export(self, path, *, model_export_selector=None):
+        asyncio.run(self._sparse_tensors_export(path, model_export_selector=model_export_selector))
+        super()._do_export(path, model_export_selector=model_export_selector)
 
-    def _get_export_meta(self, path):
+    def _get_export_meta(self, path, *, model_export_selector=None):
         sparse_data_dir = os.path.basename(path) + '.msd'
         sparse_tensors = []
+        module = self.module
+        name_prefix = None
+        if model_export_selector is not None:
+            func, name_prefix = model_export_selector
+            module = func(module)
+        selected = set(module.modules())
         for tensor in self._embedding_operators:
-            name = tensor.name
-            data_dir = tensor.name + '.msm'
-            partition_count = tensor._handle.partition_count
-            sparse_tensor = {
-                'name' : name,
-                'data_dir' : data_dir,
-                'partition_count' : partition_count,
-            }
-            sparse_tensors.append(sparse_tensor)
-        meta = super()._get_export_meta(path)
+            if tensor.item in selected:
+                name = tensor.name
+                if name_prefix is not None:
+                    if not name.startswith(name_prefix):
+                        message = f"tensor name {name!r} mismatches with name prefix {name_prefix!r}"
+                        raise RuntimeError(message)
+                    name = name[len(name_prefix):]
+                data_dir = name + '.msm'
+                partition_count = tensor._handle.partition_count
+                sparse_tensor = {
+                    'name' : name,
+                    'data_dir' : data_dir,
+                    'partition_count' : partition_count,
+                }
+                sparse_tensors.append(sparse_tensor)
+        meta = super()._get_export_meta(path, model_export_selector=model_export_selector)
         meta['sparse_data_dir'] = sparse_data_dir
         meta['sparse_tensors'] = sparse_tensors
         return meta

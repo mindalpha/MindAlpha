@@ -27,7 +27,6 @@ class SessionBuilder(object):
                  coordinator_memory='5G',
                  app_name=None,
                  spark_master=None,
-                 deploy_mode='cluster',
                  log_level='WARN'):
         self.local = local
         self.batch_size = batch_size
@@ -40,7 +39,6 @@ class SessionBuilder(object):
         self.coordinator_memory = coordinator_memory
         self.app_name = app_name
         self.spark_master = spark_master
-        self.deploy_mode = deploy_mode
         self.log_level = log_level
 
     def _get_executor_count(self):
@@ -76,8 +74,6 @@ class SessionBuilder(object):
         else:
             if self.spark_master is not None:
                 builder.master(self.spark_master)
-            if self.deploy_mode is not None:
-                builder.config('deploy-mode', self.deploy_mode)
 
     def _config_batch_size(self, builder):
         builder.config('spark.sql.execution.arrow.maxRecordsPerBatch', str(self.batch_size))

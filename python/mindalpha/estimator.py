@@ -24,6 +24,7 @@ from .updater import TensorUpdater
 from .updater import AdamTensorUpdater
 from .distributed_trainer import DistributedTrainer
 from .file_utils import dir_exists
+from .file_utils import delete_dir
 from .ps_launcher import PSLauncher
 
 class PyTorchAgent(Agent):
@@ -32,6 +33,8 @@ class PyTorchAgent(Agent):
         self.module = None
         self.updater = None
         self.dataset = None
+        self.model_export_selector = None
+        self.tensor_name_prefix = None
         self.model = None
         self.trainer = None
         self.is_training_mode = None
@@ -66,15 +69,17 @@ class PyTorchAgent(Agent):
         buf = io.BytesIO()
         torch.save(self.module, buf, pickle_module=patching_pickle)
         module = buf.getvalue()
+        model_export_selector = self.model_export_selector
         rdd = self.spark_context.parallelize(range(self.worker_count), self.worker_count)
-        rdd.barrier().mapPartitions(lambda _: __class__._distribute_module(module, _)).collect()
+        rdd.barrier().mapPartitions(lambda _: __class__._distribute_module(module, model_export_selector, _)).collect()
 
     @classmethod
-    def _distribute_module(cls, module, _):
+    def _distribute_module(cls, module, model_export_selector, _):
         buf = io.BytesIO(module)
         module = torch.load(buf)
         self = __class__.get_instance()
         self.module = module
+        self.model_export_selector = model_export_selector
         return _
 
     def distribute_updater(self):
@@ -104,7 +109,7 @@ class PyTorchAgent(Agent):
         return state,
 
     def setup_model(self):
-        self.model = Model.wrap(self, self.module)
+        self.model = Model.wrap(self, self.module, name_prefix=self.tensor_name_prefix)
 
     def setup_trainer(self):
         self.trainer = DistributedTrainer(self.model, updater=self.updater)
@@ -133,7 +138,7 @@ class PyTorchAgent(Agent):
             self.model.model_version = self.model_version
             self.model.experiment_name = self.experiment_name
             self.model.prune_small(0.0)
-            self.model.export(self.model_export_path)
+            self.model.export(self.model_export_path, model_export_selector=self.model_export_selector)
 
     def worker_stop(self):
         # Make sure the final metric buffers are pushed.
@@ -191,7 +196,6 @@ class PyTorchAgent(Agent):
 
     def preprocess_minibatch(self, minibatch):
         import numpy as np
-        import pandas as pd
         ndarrays = [col.values for col in minibatch]
         labels = minibatch[self.input_label_column_index].values.astype(np.int64)
         return ndarrays, labels
@@ -243,6 +247,8 @@ class PyTorchLauncher(PSLauncher):
         self.module = None
         self.updater = None
         self.dataset = None
+        self.model_export_selector = None
+        self.tensor_name_prefix = None
         self.worker_count = None
         self.server_count = None
         self.agent_class = None
@@ -273,12 +279,14 @@ class PyTorchLauncher(PSLauncher):
         agent.module = self.module
         agent.updater = self.updater
         agent.dataset = self.dataset
+        agent.model_export_selector = self.model_export_selector
         self.agent_object = agent
 
     def launch(self):
         self._worker_count = self.worker_count
         self._server_count = self.server_count
         self._agent_attributes = dict()
+        self._agent_attributes['tensor_name_prefix'] = self.tensor_name_prefix
         self._agent_attributes['is_training_mode'] = self.is_training_mode
         self._agent_attributes['model_in_path'] = self.model_in_path
         self._agent_attributes['model_out_path'] = self.model_out_path
@@ -303,10 +311,10 @@ class PyTorchLauncher(PSLauncher):
 class PyTorchHelperMixin(object):
     def __init__(self,
                  module=None,
-                 updater=AdamTensorUpdater(1e-5),
+                 updater=None,
                  worker_count=100,
                  server_count=100,
-                 agent_class=PyTorchAgent,
+                 agent_class=None,
                  model_in_path=None,
                  model_out_path=None,
                  model_export_path=None,
@@ -352,13 +360,13 @@ class PyTorchHelperMixin(object):
     def _check_properties(self):
         if not isinstance(self.module, torch.nn.Module):
             raise TypeError(f"module must be torch.nn.Module; {self.module!r} is invalid")
-        if not isinstance(self.updater, TensorUpdater):
+        if self.updater is not None and not isinstance(self.updater, TensorUpdater):
             raise TypeError(f"updater must be TensorUpdater; {self.updater!r} is invalid")
         if not isinstance(self.worker_count, int) or self.worker_count <= 0:
             raise TypeError(f"worker_count must be positive integer; {self.worker_count!r} is invalid")
         if not isinstance(self.server_count, int) or self.server_count <= 0:
             raise TypeError(f"server_count must be positive integer; {self.server_count!r} is invalid")
-        if not issubclass(self.agent_class, PyTorchAgent):
+        if self.agent_class is not None and not issubclass(self.agent_class, PyTorchAgent):
             raise TypeError(f"agent_class must be subclass of PyTorchAgent; {self.agent_class!r} is invalid")
         if self.model_in_path is not None and not isinstance(self.model_in_path, str):
             raise TypeError(f"model_in_path must be string; {self.model_in_path!r} is invalid")
@@ -415,11 +423,11 @@ class PyTorchHelperMixin(object):
         self._check_properties()
         launcher = PyTorchLauncher()
         launcher.module = self.module
-        launcher.updater = self.updater
+        launcher.updater = self.updater or AdamTensorUpdater(1e-5)
         launcher.dataset = dataset
         launcher.worker_count = self.worker_count
         launcher.server_count = self.server_count
-        launcher.agent_class = self.agent_class
+        launcher.agent_class = self.agent_class or PyTorchAgent
         launcher.is_training_mode = is_training_mode
         launcher.model_in_path = self.model_in_path
         launcher.model_out_path = self.model_out_path
@@ -440,27 +448,32 @@ class PyTorchHelperMixin(object):
         launcher.extra_agent_attributes = self.extra_agent_attributes
         return launcher
 
+    def _get_model_arguments(self, module):
+        args = self.extra_agent_attributes.copy()
+        args['module'] = module
+        args['updater'] = self.updater
+        args['worker_count'] = self.worker_count
+        args['server_count'] = self.server_count
+        args['agent_class'] = self.agent_class
+        args['model_in_path'] = self.model_out_path
+        args['model_export_path'] = self.model_export_path
+        args['model_version'] = self.model_version
+        args['experiment_name'] = self.experiment_name
+        args['metric_update_interval'] = self.metric_update_interval
+        args['consul_host'] = self.consul_host
+        args['consul_port'] = self.consul_port
+        args['consul_endpoint_prefix'] = self.consul_endpoint_prefix
+        args['consul_model_sync_command'] = self.consul_model_sync_command
+        args['input_label_column_index'] = self.input_label_column_index
+        args['output_label_column_name'] = self.output_label_column_name
+        args['output_label_column_type'] = self.output_label_column_type
+        args['output_prediction_column_name'] = self.output_prediction_column_name
+        args['output_prediction_column_type'] = self.output_prediction_column_type
+        return args
+
     def _create_model(self, module):
-        model = PyTorchModel(module=module,
-                             updater=self.updater,
-                             worker_count=self.worker_count,
-                             server_count=self.server_count,
-                             agent_class=self.agent_class,
-                             model_in_path=self.model_out_path,
-                             model_export_path=self.model_export_path,
-                             model_version=self.model_version,
-                             experiment_name=self.experiment_name,
-                             metric_update_interval=self.metric_update_interval,
-                             consul_host=self.consul_host,
-                             consul_port=self.consul_port,
-                             consul_endpoint_prefix=self.consul_endpoint_prefix,
-                             consul_model_sync_command=self.consul_model_sync_command,
-                             input_label_column_index=self.input_label_column_index,
-                             output_label_column_name=self.output_label_column_name,
-                             output_label_column_type=self.output_label_column_type,
-                             output_prediction_column_name=self.output_prediction_column_name,
-                             output_prediction_column_type=self.output_prediction_column_type,
-                             **self.extra_agent_attributes)
+        args = self._get_model_arguments(module)
+        model = PyTorchModel(**args)
         return model
 
 class PyTorchModel(PyTorchHelperMixin, pyspark.ml.base.Model):
@@ -513,7 +526,13 @@ class PyTorchEstimator(PyTorchHelperMixin, pyspark.ml.base.Estimator):
             # Later, we may refine the implementation of PS to remove this limitation.
             raise RuntimeError("model_out_path of estimator must be specified")
 
+    def _clear_output(self):
+        delete_dir(self.model_out_path)
+        if self.model_export_path is not None:
+            delete_dir(self.model_export_path)
+
     def _fit(self, dataset):
+        self._clear_output()
         launcher = self._create_launcher(dataset, True)
         launcher.launch()
         module = launcher.agent_object.module
