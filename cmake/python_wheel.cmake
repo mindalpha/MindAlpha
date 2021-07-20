@@ -46,6 +46,7 @@ set(python_files
     python/mindalpha/job_utils.py
     python/mindalpha/estimator.py
     python/mindalpha/retrieval.py
+    python/mindalpha/swing.py
     python/mindalpha/experiment.py
     python/mindalpha/spark.py
     python/mindalpha/patching_pickle.py
