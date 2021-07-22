@@ -19,14 +19,20 @@ def write_s3_csv(df, url, mode="overwrite",
     from .url_utils import use_s3a
     df.write.csv(use_s3a(url), mode=mode, header=header, sep=delimiter, encoding=encoding)
 
-def config_cassandra(spark_session, catalog, host_ip, port=9042):
+def config_cassandra(spark_session, catalog, host_ip, port=9042, user_name=None, password=None):
     catalog_key = f'spark.sql.catalog.{catalog}'
     catalog_value = 'com.datastax.spark.connector.datasource.CassandraCatalog'
     host_key = f'{catalog_key}.spark.cassandra.connection.host'
     port_key = f'{catalog_key}.spark.cassandra.connection.port'
+    user_name_key = f'{catalog_key}.spark.cassandra.auth.username'
+    password_key = f'{catalog_key}.spark.cassandra.auth.password'
     spark_session.conf.set(catalog_key, catalog_value)
     spark_session.conf.set(host_key, host_ip)
     spark_session.conf.set(port_key, str(port))
+    if user_name is not None:
+        spark_session.conf.set(user_name_key, user_name)
+    if password is not None:
+        spark_session.conf.set(password_key, password)
 
 def ensure_cassandra_db(spark_session, catalog, db_name,
                         db_properties="class='SimpleStrategy', replication_factor='1'"):

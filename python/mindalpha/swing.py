@@ -30,6 +30,8 @@ class SwingModel(pyspark.ml.base.Model):
                  cassandra_catalog=None,
                  cassandra_host_ip=None,
                  cassandra_port=9042,
+                 cassandra_user_name=None,
+                 cassandra_password=None,
                  cassandra_db_name=None,
                  cassandra_db_properties="class='SimpleStrategy', replication_factor='1'",
                  cassandra_table_name=None,
@@ -43,6 +45,8 @@ class SwingModel(pyspark.ml.base.Model):
         self.cassandra_catalog = cassandra_catalog
         self.cassandra_host_ip = cassandra_host_ip
         self.cassandra_port = cassandra_port
+        self.cassandra_user_name = cassandra_user_name
+        self.cassandra_password = cassandra_password
         self.cassandra_db_name = cassandra_db_name
         self.cassandra_db_properties = cassandra_db_properties
         self.cassandra_table_name = cassandra_table_name
@@ -80,7 +84,8 @@ class SwingModel(pyspark.ml.base.Model):
             raise ValueError("cassandra_table_name is required")
         spark = self.df.sql_ctx.sparkSession
         config_cassandra(spark, self.cassandra_catalog, self.cassandra_host_ip,
-                         port=self.cassandra_port)
+                         port=self.cassandra_port, user_name=self.cassandra_user_name,
+                         password=self.cassandra_password)
         ensure_cassandra_db(spark, self.cassandra_catalog, self.cassandra_db_name,
                             db_properties=self.cassandra_db_properties)
         write_cassandra(self.df, self.cassandra_catalog, self.cassandra_db_name,
@@ -102,6 +107,8 @@ class SwingEstimator(pyspark.ml.base.Estimator):
                  cassandra_catalog=None,
                  cassandra_host_ip=None,
                  cassandra_port=9042,
+                 cassandra_user_name=None,
+                 cassandra_password=None,
                  cassandra_db_name=None,
                  cassandra_db_properties="class='SimpleStrategy', replication_factor='1'",
                  cassandra_table_name=None,
@@ -121,6 +128,8 @@ class SwingEstimator(pyspark.ml.base.Estimator):
         self.cassandra_catalog = cassandra_catalog
         self.cassandra_host_ip = cassandra_host_ip
         self.cassandra_port = cassandra_port
+        self.cassandra_user_name = cassandra_user_name
+        self.cassandra_password = cassandra_password
         self.cassandra_db_name = cassandra_db_name
         self.cassandra_db_properties = cassandra_db_properties
         self.cassandra_table_name = cassandra_table_name
@@ -165,6 +174,8 @@ class SwingEstimator(pyspark.ml.base.Estimator):
                     cassandra_catalog=self.cassandra_catalog,
                     cassandra_host_ip=self.cassandra_host_ip,
                     cassandra_port=self.cassandra_port,
+                    cassandra_user_name=self.cassandra_user_name,
+                    cassandra_password=self.cassandra_password,
                     cassandra_db_name=self.cassandra_db_name,
                     cassandra_db_properties=self.cassandra_db_properties,
                     cassandra_table_name=self.cassandra_table_name,
