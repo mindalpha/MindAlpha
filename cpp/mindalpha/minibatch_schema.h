@@ -19,6 +19,7 @@ class MinibatchSchema {
   void LoadColumnNameFromFile(const std::string &uri);
   void Clear();
   Column GetColumn(const std::string &column_name) const;
+  std::string GetSchemaString() const;
   std::string ToString() const;
   private:
   std::unordered_map<std::string, int> column_name_map_;

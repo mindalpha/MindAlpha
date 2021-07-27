@@ -1,6 +1,7 @@
 #include <mindalpha/io.h>
 #include <mindalpha/minibatch_schema.h>
 #include <mindalpha/string_utils.h>
+#include <fmt/format.h>
 namespace mindalpha {
 void MinibatchSchema::LoadColumnNameFromStream(std::istream &stream) {
   using namespace std::string_view_literals;
@@ -53,6 +54,19 @@ void MinibatchSchema::Clear() {
   column_name_source_.clear();
   column_names_.clear();
   column_name_map_.clear();
+}
+std::string MinibatchSchema::GetSchemaString() const {
+    fmt::memory_buffer buff;
+    buff.reserve(1024);
+    // schema detail
+    // project string ,article string ,requests integer ,bytes_served long
+    for (auto& name : column_names_) {
+         fmt::format_to(buff, "{} string,", name);
+    }
+    if (buff.size()) {
+        buff.resize(buff.size() - 1);
+    }
+    return std::string(buff.data(), buff.size());
 }
 std::string MinibatchSchema::ToString() const {
   // TODO

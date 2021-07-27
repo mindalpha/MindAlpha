@@ -97,6 +97,7 @@ py::class_<mindalpha::MinibatchSchema, std::shared_ptr<mindalpha::MinibatchSchem
     .def("clear", &mindalpha::MinibatchSchema::Clear)
     .def("load_column_name_from_source", &mindalpha::MinibatchSchema::LoadColumnNameFromSource)
     .def("load_column_name_from_file", &mindalpha::MinibatchSchema::LoadColumnNameFromFile)
+    .def("get_schema_str", &mindalpha::MinibatchSchema::GetSchemaString)
     ;
 py::class_<mindalpha::IndexBatch, std::shared_ptr<mindalpha::IndexBatch>>(m, "IndexBatch")
     .def_property_readonly("rows", &mindalpha::IndexBatch::GetRows)

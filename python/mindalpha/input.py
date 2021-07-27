@@ -64,16 +64,21 @@ def read_kudu(spark_session, url, column_name, sql=None, condition_select_conf='
     return kudu_df
 
 def read_s3_csv(spark_session, url, shuffle=False, num_workers=1,
-                header=False, nullable=False, delimiter="\002", encoding="UTF-8"):
+                header=False, nullable=False, delimiter="\002", encoding="UTF-8", schema_str=None):
     from .url_utils import use_s3a
-    df = (spark_session
+    reader = (spark_session
              .read
              .format('csv')
              .option("header", str(bool(header)).lower())
              .option("nullable", str(bool(nullable)).lower())
              .option("delimiter", delimiter)
-             .option("encoding", encoding)
-             .load(use_s3a(url)))
+             .option("encoding", encoding))
+
+    if schema_str is not None:
+        reader = reader.schema(schema_str)
+
+    df = reader.load(use_s3a(url))
+    print("debug @ Schema {}".format(df.printSchema()))
     if shuffle and num_workers > 1:
         df = shuffle_df(df, num_workers)
     else:
