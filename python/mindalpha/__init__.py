@@ -78,6 +78,8 @@ else:
     from .retrieval import FaissIndexRetrievalAgent
     from .retrieval import RetrievalModel
     from .retrieval import RetrievalEstimator
+    from .swing import SwingModel
+    from .swing import SwingEstimator
 
 from ._mindalpha import get_mindalpha_version
 __version__ = get_mindalpha_version()
