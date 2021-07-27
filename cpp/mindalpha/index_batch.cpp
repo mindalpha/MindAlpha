@@ -19,8 +19,13 @@
 
 namespace mindalpha
 {
+IndexBatch::IndexBatch(const std::string& schema_file) {
 
-IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters)
+}
+IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters) {
+   ConvertColumn(std::move(columns), delimiters);
+}
+void IndexBatch::ConvertColumn(pybind11::list columns, const std::string& delimiters)
 {
     if (columns.empty())
         throw std::runtime_error("empty columns list");
@@ -101,7 +106,7 @@ pybind11::list IndexBatch::ToList() const
 
 std::string IndexBatch::ToString() const
 {
-    return "[IndexBatch: " + std::to_string(GetRows()) + " x " + std::to_string(GetColumns()) + "]";
+    return fmt::format("[IndexBatch: {} x {}]", GetRows(), GetColumns());
 }
 
 }

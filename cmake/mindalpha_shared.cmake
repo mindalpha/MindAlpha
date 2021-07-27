@@ -83,6 +83,7 @@ add_library(mindalpha_shared SHARED
     cpp/mindalpha/ps_default_agent.cpp
     cpp/mindalpha/ps_helper.cpp
     cpp/mindalpha/combine_schema.cpp
+    cpp/mindalpha/minibatch_schema.cpp
     cpp/mindalpha/index_batch.cpp
     cpp/mindalpha/hash_uniquifier.cpp
     cpp/mindalpha/model_metric_buffer.cpp

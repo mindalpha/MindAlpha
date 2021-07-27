@@ -19,6 +19,7 @@
 #include <mindalpha/pybind_utils.h>
 #include <mindalpha/combine_schema.h>
 #include <mindalpha/index_batch.h>
+#include <mindalpha/minibatch_schema.h>
 #include <mindalpha/hash_uniquifier.h>
 #include <mindalpha/feature_extraction_python_bindings.h>
 
@@ -48,9 +49,11 @@ py::class_<mindalpha::CombineSchema, std::shared_ptr<mindalpha::CombineSchema>>(
              return map;
          })
     .def("combine_to_indices_and_offsets",
-         [](const mindalpha::CombineSchema& schema, const mindalpha::IndexBatch& batch, bool feature_offset)
+         [](const mindalpha::CombineSchema& schema,
+            const mindalpha::MinibatchSchema& batch_schema,
+            const mindalpha::IndexBatch& batch, bool feature_offset)
          {
-             auto [indices, offsets] = schema.CombineToIndicesAndOffsets(batch, feature_offset);
+             auto [indices, offsets] = schema.CombineToIndicesAndOffsets(batch_schema, batch, feature_offset);
              py::array indices_arr = mindalpha::to_numpy_array(std::move(indices));
              py::array offsets_arr = mindalpha::to_numpy_array(std::move(offsets));
              return py::make_tuple(indices_arr, offsets_arr);
@@ -89,9 +92,16 @@ py::class_<mindalpha::CombineSchema, std::shared_ptr<mindalpha::CombineSchema>>(
         }))
     ;
 
+py::class_<mindalpha::MinibatchSchema, std::shared_ptr<mindalpha::MinibatchSchema>>(m, "MinibatchSchema")
+    .def(py::init<>())
+    .def("clear", &mindalpha::MinibatchSchema::Clear)
+    .def("load_column_name_from_source", &mindalpha::MinibatchSchema::LoadColumnNameFromSource)
+    .def("load_column_name_from_file", &mindalpha::MinibatchSchema::LoadColumnNameFromFile)
+    ;
 py::class_<mindalpha::IndexBatch, std::shared_ptr<mindalpha::IndexBatch>>(m, "IndexBatch")
     .def_property_readonly("rows", &mindalpha::IndexBatch::GetRows)
     .def_property_readonly("columns", &mindalpha::IndexBatch::GetColumns)
+    .def(py::init<const std::string&>())
     .def(py::init<py::list, const std::string&>())
     .def("to_list", &mindalpha::IndexBatch::ToList)
     .def("__str__", &mindalpha::IndexBatch::ToString)

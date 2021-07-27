@@ -22,6 +22,7 @@
 #include <vector>
 #include <unordered_map>
 #include <mindalpha/index_batch.h>
+#include <mindalpha/minibatch_schema.h>
 
 namespace mindalpha
 {
@@ -49,7 +50,8 @@ public:
     const std::unordered_map<std::string, int>& GetColumnNameMap() const { return column_name_map_; }
 
     std::tuple<std::vector<uint64_t>, std::vector<uint64_t>>
-    CombineToIndicesAndOffsets(const IndexBatch& batch, bool feature_offset) const;
+    CombineToIndicesAndOffsets(const MinibatchSchema& bschema,
+                               const IndexBatch& batch, bool feature_offset) const;
 
     static uint64_t ComputeFeatureHash(const std::vector<std::pair<std::string, std::string>>& feature);
 
@@ -80,7 +82,8 @@ private:
                                   size_t total_results);
 
     const StringViewHashVector*
-    GetCell(const IndexBatch& batch, size_t i, const std::string& column_name) const;
+    GetCell(const MinibatchSchema& bschema,
+            const IndexBatch& batch, size_t i, const std::string& column_name) const;
 
     std::unordered_map<std::string, int> column_name_map_;
     std::vector<std::vector<std::string>> combine_columns_;
