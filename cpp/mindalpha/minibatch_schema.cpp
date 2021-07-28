@@ -3,6 +3,8 @@
 #include <mindalpha/string_utils.h>
 #include <fmt/format.h>
 namespace mindalpha {
+MinibatchSchema::MinibatchSchema() {
+}
 void MinibatchSchema::LoadColumnNameFromStream(std::istream &stream) {
   using namespace std::string_view_literals;
   std::string line;

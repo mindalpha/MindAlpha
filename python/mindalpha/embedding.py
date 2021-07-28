@@ -90,7 +90,7 @@ class EmbeddingOperator(torch.nn.Module):
             column_name_file_path = self._checked_get_column_name_file_path()
         combine_schema_file_path = self._checked_get_combine_schema_file_path()
         self._minibatch_schema = MinibatchSchema()
-        self._minibatch_schema._load_combine_schema(use_s3(column_name_file_path))
+        self._minibatch_schema.load_column_name_from_file(use_s3(column_name_file_path))
         self._combine_schema = CombineSchema()
         self._combine_schema.load_column_name_from_file(use_s3(column_name_file_path))
         self._combine_schema.load_combine_schema_from_file(use_s3(combine_schema_file_path))

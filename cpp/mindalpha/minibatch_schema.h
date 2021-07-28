@@ -18,6 +18,7 @@ class MinibatchSchema {
   void LoadColumnNameFromSource(const std::string &source);
   void LoadColumnNameFromFile(const std::string &uri);
   void Clear();
+  const std::string& GetColumnNameSource() const { return column_name_source_; }
   Column GetColumn(const std::string &column_name) const;
   std::string GetSchemaString() const;
   std::string ToString() const;
