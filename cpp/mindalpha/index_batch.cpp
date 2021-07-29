@@ -22,6 +22,66 @@ namespace mindalpha
 IndexBatch::IndexBatch(const std::string& schema_file) {
 
 }
+void DebugPyArray(pybind11::array arr) {
+
+    auto padding_shape = 0;
+    if (arr.ndim() > 1) {
+        padding_shape = arr.shape(1);
+    }
+    fmt::print("######### {} {}:{}:{}\t{}:{}\t{}\n",
+                arr.dtype().kind(),
+                arr.ndim(),
+                arr.size(),
+                arr.itemsize(),
+                arr.shape(0),
+                padding_shape,
+                arr.strides(0));
+}
+IndexBatch::IndexBatch(pybind11::array columns, const std::string& delimiters) {
+    if (columns.size() <= 0) {
+        throw std::runtime_error("empty columns list");
+    }
+    split_columns_.reserve(columns.size());
+    size_t rows = 0;
+    size_t j = 0;
+#if 1
+    DebugPyArray(columns);
+    for (auto & item : columns) {
+        pybind11::array arr = item.cast<pybind11::array>();
+        if (arr.dtype().kind() != 'O')
+            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
+        DebugPyArray(arr);
+        StringViewColumn column = SplitColumn(arr, delimiters);
+        if (j == 0)
+            rows = column.size();
+        else if (column.size() != rows)
+            throw std::runtime_error("column " + std::to_string(j) + " and column 0 are not of the same length; " +
+                                     std::to_string(column.size()) + " != " + std::to_string(rows));
+        split_columns_.push_back(std::move(column));
+        ++j;
+    }
+#else
+    for (size_t j = 0; j < columns.size(); j++) {
+        const void* item_ptr = columns.data(j);
+        if (!pybind11::isinstance<pybind11::array>(item))
+            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray");
+        pybind11::array arr = item.cast<pybind11::array>();
+        if (arr.dtype().kind() != 'O')
+            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
+        StringViewColumn column = SplitColumn(arr, delimiters);
+        if (j == 0)
+            rows = column.size();
+        else if (column.size() != rows)
+            throw std::runtime_error("column " + std::to_string(j) + " and column 0 are not of the same length; " +
+                                     std::to_string(column.size()) + " != " + std::to_string(rows));
+        split_columns_.push_back(std::move(column));
+        ++j;
+    }
+#endif
+    if (rows == 0)
+        throw std::runtime_error("number of rows is zero");
+    rows_ = rows;
+}
 IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters) {
    ConvertColumn(std::move(columns), delimiters);
 }
@@ -58,6 +118,15 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
     const size_t rows = column.size();
     StringViewColumn output;
     output.reserve(rows);
+#if 1
+    for (auto& item: column) {
+        //fmt::print("####### {}\n", item);
+        pybind11::object cell = pybind11::reinterpret_borrow<pybind11::object>(item);
+        auto [str, obj] = get_string_object_tuple(cell);
+        auto items = SplitFilterStringViewHash(str, delims);
+        output.push_back(string_view_cell{std::move(items), std::move(obj)});
+    }
+#else
     for (size_t i = 0; i < rows; i++)
     {
         const void* item_ptr = column.data(i);
@@ -68,6 +137,7 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
         auto items = SplitFilterStringViewHash(str, delims);
         output.push_back(string_view_cell{std::move(items), std::move(obj)});
     }
+#endif
     return output;
 }
 

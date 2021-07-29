@@ -402,6 +402,7 @@ class EmbeddingOperator(torch.nn.Module):
     def _combine_to_indices_and_offsets(self, ndarrays, feature_offset):
         delim = self._checked_get_delimiter()
         batch = IndexBatch(ndarrays, delim)
+        #print("##########YYYY######## {}\n".format(batch));
         indices, offsets = self._combine_schema.combine_to_indices_and_offsets(self._minibatch_schema, batch, feature_offset)
         return indices, offsets
 
