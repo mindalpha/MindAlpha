@@ -159,8 +159,17 @@ class PyTorchAgent(Agent):
                 self = __class__.get_instance()
                 result = self.train_minibatch_dataframe(df)
                 yield result
-        if False:
-            df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=self.dataset.schema).alias('train')
+        if True:
+            from pyspark.sql.types import FloatType
+            from pyspark.sql.types import StructField
+            from pyspark.sql.types import StructType
+            schema = StructType([
+                StructField("tain", FloatType(), True)
+            ])
+            import copy
+            #schema = copy.deepcopy(self.dataset.schema)
+            #schema.add("result", FloatType(), True)
+            df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=schema).alias('train')
             df.show()
         else:
             df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
@@ -238,7 +247,7 @@ class PyTorchAgent(Agent):
         minibatch_size = len(dataframe.index.values)
         result = [0.0] * minibatch_size
         import pandas as pd
-        return pd.DataFrame(result, dtype=np.str)
+        return pd.DataFrame(result, dtype=np.float32)
 
     def train_minibatch(self, minibatch):
         self.model.train()

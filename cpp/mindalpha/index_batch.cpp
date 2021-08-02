@@ -48,24 +48,13 @@ IndexBatch::IndexBatch(pybind11::array columns, const std::string& delimiters) {
     DebugPyArray(columns);
     for (auto & item : columns) {
         pybind11::array arr = item.cast<pybind11::array>();
-        if (arr.dtype().kind() != 'O')
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
-        DebugPyArray(arr);
-        StringViewColumn column = SplitColumn(arr, delimiters);
-        if (j == 0)
-            rows = column.size();
-        else if (column.size() != rows)
-            throw std::runtime_error("column " + std::to_string(j) + " and column 0 are not of the same length; " +
-                                     std::to_string(column.size()) + " != " + std::to_string(rows));
-        split_columns_.push_back(std::move(column));
-        ++j;
-    }
 #else
     for (size_t j = 0; j < columns.size(); j++) {
         const void* item_ptr = columns.data(j);
         if (!pybind11::isinstance<pybind11::array>(item))
             throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray");
         pybind11::array arr = item.cast<pybind11::array>();
+#endif
         if (arr.dtype().kind() != 'O')
             throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
         StringViewColumn column = SplitColumn(arr, delimiters);
@@ -77,7 +66,6 @@ IndexBatch::IndexBatch(pybind11::array columns, const std::string& delimiters) {
         split_columns_.push_back(std::move(column));
         ++j;
     }
-#endif
     if (rows == 0)
         throw std::runtime_error("number of rows is zero");
     rows_ = rows;
@@ -120,24 +108,18 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
     output.reserve(rows);
 #if 1
     for (auto& item: column) {
-        //fmt::print("####### {}\n", item);
-        pybind11::object cell = pybind11::reinterpret_borrow<pybind11::object>(item);
-        auto [str, obj] = get_string_object_tuple(cell);
-        auto items = SplitFilterStringViewHash(str, delims);
-        output.push_back(string_view_cell{std::move(items), std::move(obj)});
-    }
 #else
     for (size_t i = 0; i < rows; i++)
     {
         const void* item_ptr = column.data(i);
         // Consider avoiding complex casting here.
         PyObject* item = (PyObject*)(*(void**)item_ptr);
+#endif
         pybind11::object cell = pybind11::reinterpret_borrow<pybind11::object>(item);
         auto [str, obj] = get_string_object_tuple(cell);
         auto items = SplitFilterStringViewHash(str, delims);
         output.push_back(string_view_cell{std::move(items), std::move(obj)});
     }
-#endif
     return output;
 }
 
