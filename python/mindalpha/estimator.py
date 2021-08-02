@@ -164,18 +164,35 @@ class PyTorchAgent(Agent):
             from pyspark.sql.types import StructField
             from pyspark.sql.types import StructType
             schema = StructType([
-                StructField("tain", FloatType(), True)
+                StructField("train", FloatType(), True)
             ])
-            import copy
-            #schema = copy.deepcopy(self.dataset.schema)
-            #schema.add("result", FloatType(), True)
             df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=schema).alias('train')
+            df.cache()
             df.show()
         else:
             df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
             df.groupBy(df[0]).count().show()
 
     def feed_validation_dataset(self):
+        def feed_validation_map_minibatch(iterator):
+            for df in iterator:
+                self = __class__.get_instance()
+                result = self.validate_minibatch_dataframe(df)
+                yield result
+        if True:
+            from pyspark.sql.types import FloatType
+            from pyspark.sql.types import StructField
+            from pyspark.sql.types import StructType
+            schema = StructType([
+                StructField("validation", FloatType(), True)
+            ])
+            df = self.dataset.mapInPandas(feed_validation_map_minibatch, schema=schema).alias("validate")
+            df.cache()
+            df.show()
+        else:
+            self.feed_validation_dataset_udf()
+
+    def feed_validation_dataset_udf(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,
                                      self.feed_validation_minibatch()(*self.dataset.columns))
         df = df.withColumn(self.output_label_column_name,
@@ -233,20 +250,25 @@ class PyTorchAgent(Agent):
             result = pd.Series(result)
         return result
 
-    def train_minibatch_dataframe(self, dataframe):
+    def preprocess_minibatch_dataframe(self, dataframe):
         import numpy as np
-        self.model.train()
         ndarrays = dataframe.to_numpy()
         labels = dataframe.index.values.astype(np.int64)
-        predictions = self.model(ndarrays.T)
         labels = torch.from_numpy(labels).reshape(-1, 1)
+        return ndarrays, labels
+
+    def train_minibatch_dataframe(self, dataframe):
+        self.model.train()
+        ndarrays, labels = self.preprocess_minibatch_dataframe(dataframe)
+        predictions = self.model(ndarrays.T)
         loss = self.compute_loss(predictions, labels)
         self.trainer.train(loss)
         self.update_progress(predictions, labels)
-        #
+
         minibatch_size = len(dataframe.index.values)
         result = [0.0] * minibatch_size
         import pandas as pd
+        import numpy as np
         return pd.DataFrame(result, dtype=np.float32)
 
     def train_minibatch(self, minibatch):
@@ -258,6 +280,17 @@ class PyTorchAgent(Agent):
         self.trainer.train(loss)
         self.update_progress(predictions, labels)
 
+    def validate_minibatch_dataframe(self, dataframe):
+        self.model.eval()
+        ndarrays, labels = self.preprocess_minibatch_dataframe(dataframe)
+        predictions = self.model(ndarrays.T)
+        loss = self.compute_loss(predictions, labels)
+        self.update_progress(predictions, labels)
+        result = predictions.detach().reshape(-1)
+        import pandas as pd
+        import numpy as np
+        return pd.DataFrame(result, dtype=np.float32)
+
     def validate_minibatch(self, minibatch):
         self.model.eval()
         ndarrays, labels = self.preprocess_minibatch(minibatch)
@@ -268,7 +301,7 @@ class PyTorchAgent(Agent):
         return predictions.detach().reshape(-1)
 
     def compute_loss(self, predictions, labels):
-        print("######### {}*{} and {}*{} #####\n".format(predictions.shape[0], predictions.shape[1], labels.shape[0], labels.shape[1]))
+        #print("######### {}*{} and {}*{} #####\n".format(predictions.shape[0], predictions.shape[1], labels.shape[0], labels.shape[1]))
         from .loss_utils import log_loss
         return log_loss(predictions, labels) / labels.shape[0]
 
