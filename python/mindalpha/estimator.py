@@ -20,6 +20,7 @@ import pyspark.ml.base
 from . import patching_pickle
 from .agent import Agent
 from .model import Model
+from .minibatch import Minibatch
 from .updater import TensorUpdater
 from .updater import AdamTensorUpdater
 from .distributed_trainer import DistributedTrainer
@@ -159,19 +160,19 @@ class PyTorchAgent(Agent):
                 self = __class__.get_instance()
                 result = self.train_minibatch_dataframe(df)
                 yield result
-        if True:
-            from pyspark.sql.types import FloatType
-            from pyspark.sql.types import StructField
-            from pyspark.sql.types import StructType
-            schema = StructType([
-                StructField("train", FloatType(), True)
-            ])
-            df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=schema).alias('train')
-            df.cache()
-            df.show()
-        else:
-            df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
-            df.groupBy(df[0]).count().show()
+        from pyspark.sql.types import FloatType
+        from pyspark.sql.types import StructField
+        from pyspark.sql.types import StructType
+        schema = StructType([
+            StructField("train", FloatType(), True)
+        ])
+        df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=schema).alias('train')
+        df.cache()
+        df.show()
+
+    def feed_training_dataset_udf(self):
+        df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
+        df.groupBy(df[0]).count().show()
 
     def feed_validation_dataset(self):
         def feed_validation_map_minibatch(iterator):
@@ -179,18 +180,15 @@ class PyTorchAgent(Agent):
                 self = __class__.get_instance()
                 result = self.validate_minibatch_dataframe(df)
                 yield result
-        if True:
-            from pyspark.sql.types import FloatType
-            from pyspark.sql.types import StructField
-            from pyspark.sql.types import StructType
-            schema = StructType([
-                StructField("validation", FloatType(), True)
-            ])
-            df = self.dataset.mapInPandas(feed_validation_map_minibatch, schema=schema).alias("validate")
-            df.cache()
-            df.show()
-        else:
-            self.feed_validation_dataset_udf()
+        from pyspark.sql.types import FloatType
+        from pyspark.sql.types import StructField
+        from pyspark.sql.types import StructType
+        schema = StructType([
+            StructField("validation", FloatType(), True)
+        ])
+        df = self.dataset.mapInPandas(feed_validation_map_minibatch, schema=schema).alias("validate")
+        df.cache()
+        df.show()
 
     def feed_validation_dataset_udf(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,
@@ -252,17 +250,15 @@ class PyTorchAgent(Agent):
 
     def preprocess_minibatch_dataframe(self, dataframe):
         import numpy as np
-        ndarrays = dataframe.to_numpy()
         labels = dataframe.index.values.astype(np.int64)
         labels = torch.from_numpy(labels).reshape(-1, 1)
-        return ndarrays, labels
+        minibatch = Minibatch(dataframe)
+        return minibatch, labels
 
     def train_minibatch_dataframe(self, dataframe):
         self.model.train()
-        ndarrays, labels = self.preprocess_minibatch_dataframe(dataframe)
-        column_names = [col for  col in dataframe.columns]
-        #print("### {}\n".format(column_names))
-        predictions = self.model(column_names, ndarrays.T)
+        minibatch, labels = self.preprocess_minibatch_dataframe(dataframe)
+        predictions = self.model(minibatch)
         loss = self.compute_loss(predictions, labels)
         self.trainer.train(loss)
         self.update_progress(predictions, labels)
@@ -284,8 +280,8 @@ class PyTorchAgent(Agent):
 
     def validate_minibatch_dataframe(self, dataframe):
         self.model.eval()
-        ndarrays, labels = self.preprocess_minibatch_dataframe(dataframe)
-        predictions = self.model(ndarrays.T)
+        minibatch, labels = self.preprocess_minibatch_dataframe(dataframe)
+        predictions = self.model(minibatch)
         loss = self.compute_loss(predictions, labels)
         self.update_progress(predictions, labels)
         result = predictions.detach().reshape(-1)
@@ -303,7 +299,6 @@ class PyTorchAgent(Agent):
         return predictions.detach().reshape(-1)
 
     def compute_loss(self, predictions, labels):
-        #print("######### {}*{} and {}*{} #####\n".format(predictions.shape[0], predictions.shape[1], labels.shape[0], labels.shape[1]))
         from .loss_utils import log_loss
         return log_loss(predictions, labels) / labels.shape[0]
 

@@ -75,7 +75,8 @@ class Cast(torch.nn.Module):
         self._output = torch.tensor(0.0)
 
     @torch.jit.unused
-    def _do_cast(self, ndarrays):
+    def _do_cast(self, minibatch):
+        ndarrays = minibatch.column_values
         columns = []
         for name in self._selected_columns:
             index = self._column_name_map[name]
@@ -89,10 +90,10 @@ class Cast(torch.nn.Module):
         return output
 
     @torch.jit.unused
-    def _cast(self, ndarrays):
+    def _cast(self, minibatch):
         self._clean()
         self._ensure_column_name_map_loaded()
-        self._output = self._do_cast(ndarrays)
+        self._output = self._do_cast(minibatch)
 
     def forward(self, x):
         return self._output
