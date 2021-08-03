@@ -53,6 +53,9 @@ private:
 
     std::vector<StringViewColumn> split_columns_;
     size_t rows_;
+
+    std::unordered_map<std::string, int> column_name_map_;
+    std::vector<std::string> column_names_;
 };
 
 }

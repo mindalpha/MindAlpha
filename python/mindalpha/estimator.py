@@ -261,7 +261,7 @@ class PyTorchAgent(Agent):
         self.model.train()
         ndarrays, labels = self.preprocess_minibatch_dataframe(dataframe)
         column_names = [col for  col in dataframe.columns]
-        print("### {}\n".format(column_names))
+        #print("### {}\n".format(column_names))
         predictions = self.model(column_names, ndarrays.T)
         loss = self.compute_loss(predictions, labels)
         self.trainer.train(loss)

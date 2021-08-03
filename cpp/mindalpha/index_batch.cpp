@@ -23,7 +23,7 @@ IndexBatch::IndexBatch(const std::string& schema_file) {
 
 }
 void DebugPyArray(pybind11::array arr) {
-
+#if 0
     auto padding_shape = 0;
     if (arr.ndim() > 1) {
         padding_shape = arr.shape(1);
@@ -36,12 +36,23 @@ void DebugPyArray(pybind11::array arr) {
                 arr.shape(0),
                 padding_shape,
                 arr.strides(0));
+#endif
 }
 IndexBatch::IndexBatch(pybind11::list column_names, pybind11::array columns, const std::string& delimiters) {
     if (columns.size() <= 0) {
         throw std::runtime_error("empty columns list");
     }
-    //DebugPyArray(column_names);
+    column_names_.reserve(column_names.size());
+    for (auto & col : column_names) {
+        //https://github.com/pybind/pybind11/issues/1201
+        auto o = pybind11::cast<pybind11::object>(col);
+        auto [str, obj] = get_string_object_tuple(o);
+        // todo compare with string_view
+        std::string col_name(str.data(), str.size());
+        column_name_map_.emplace(col_name, column_names_.size());
+        column_names_.emplace_back(col_name);
+    }
+    // fmt::print("load {} {} from {}\n", column_name_map_.size(), column_names_.size(), column_names.size());
     split_columns_.reserve(columns.size());
     size_t rows = 0;
     size_t j = 0;
@@ -126,11 +137,19 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
 
 const StringViewHashVector& IndexBatch::GetCell(size_t i, size_t j, const std::string& column_name) const
 {
-    if (i >= rows_)
-        throw std::runtime_error("row index i is out of range; " + std::to_string(i) + " >= " + std::to_string(rows_));
-    if (j >= split_columns_.size())
-        throw std::runtime_error("column index j (" + column_name + ") is out of range; " + std::to_string(j) +
-                                 " >= " + std::to_string(split_columns_.size()));
+    if (i >= rows_) {
+        throw std::runtime_error(fmt::format("row index i is out of range; {}>={}", i, rows_));
+    }
+    auto iter = column_name_map_.find(column_name);
+    if (iter == column_name_map_.end()) {
+        throw std::runtime_error(fmt::format("can't find {} in column_name_map element_size {}",
+                                 column_name, column_name_map_.size()));
+    }
+    j = iter->second;
+    if (j >= split_columns_.size()) {
+        throw std::runtime_error(fmt::format("column index j ({}) is out of range; {} >={}",
+                                  column_name, j, split_columns_.size()));
+    }
     auto& column = split_columns_.at(j);
     return column.at(i).items_;
 }

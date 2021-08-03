@@ -138,8 +138,7 @@ void CombineSchema::LoadCombineSchemaFromFile(const std::string& uri)
 }
 
 std::tuple<std::vector<uint64_t>, std::vector<uint64_t>>
-CombineSchema::CombineToIndicesAndOffsets(const MinibatchSchema& bschema,
-    const IndexBatch& batch, bool feature_offset) const
+CombineSchema::CombineToIndicesAndOffsets(const IndexBatch& batch, bool feature_offset) const
 {
     const size_t minibatch_size = batch.GetRows();
     const size_t feature_count = GetFeatureCount();
@@ -165,7 +164,7 @@ CombineSchema::CombineToIndicesAndOffsets(const MinibatchSchema& bschema,
             size_t total_result = 1;
             for (const std::string& column_name : combine)
             {
-                const StringViewHashVector* const cell = GetCell(bschema, batch, i, column_name);
+                const StringViewHashVector* const cell = GetCell(batch, i, column_name);
                 if (cell == nullptr)
                 {
                     has_none = true;
@@ -185,12 +184,10 @@ CombineSchema::CombineToIndicesAndOffsets(const MinibatchSchema& bschema,
 }
 
 const StringViewHashVector*
-CombineSchema::GetCell(const MinibatchSchema& bschema,
-    const IndexBatch& batch, size_t i, const std::string& column_name) const
+CombineSchema::GetCell(const IndexBatch& batch, size_t i, const std::string& column_name) const
 {
-    auto col = bschema.GetColumn(column_name);
-    const size_t column_index = col.idx;
-    const StringViewHashVector& vec = batch.GetCell(i, column_index, column_name);
+    const size_t padding = -1;
+    const StringViewHashVector& vec = batch.GetCell(i, padding, column_name);
     return vec.empty() ? nullptr : &vec;
 }
 

@@ -18,7 +18,6 @@ import asyncio
 import os
 import numpy
 import torch
-from ._mindalpha import MinibatchSchema
 from ._mindalpha import CombineSchema
 from ._mindalpha import IndexBatch
 from ._mindalpha import HashUniquifier
@@ -75,7 +74,6 @@ class EmbeddingOperator(torch.nn.Module):
         self._distributed_tensor = None
         self._combine_schema_source = None
         self._combine_schema = None
-        self._minibatch_schema = None
         if self._column_name_file_path is not None and self._combine_schema_file_path is not None:
             self._load_combine_schema()
         self._clean()
@@ -89,8 +87,6 @@ class EmbeddingOperator(torch.nn.Module):
         else:
             column_name_file_path = self._checked_get_column_name_file_path()
         combine_schema_file_path = self._checked_get_combine_schema_file_path()
-        self._minibatch_schema = MinibatchSchema()
-        self._minibatch_schema.load_column_name_from_file(use_s3(column_name_file_path))
         self._combine_schema = CombineSchema()
         self._combine_schema.load_column_name_from_file(use_s3(column_name_file_path))
         self._combine_schema.load_combine_schema_from_file(use_s3(combine_schema_file_path))
@@ -402,8 +398,7 @@ class EmbeddingOperator(torch.nn.Module):
     def _combine_to_indices_and_offsets(self, column_names, ndarrays, feature_offset):
         delim = self._checked_get_delimiter()
         batch = IndexBatch(column_names, ndarrays, delim)
-        print("##########Y{}Y########\n".format(column_names));
-        indices, offsets = self._combine_schema.combine_to_indices_and_offsets(self._minibatch_schema, batch, feature_offset)
+        indices, offsets = self._combine_schema.combine_to_indices_and_offsets(batch, feature_offset)
         return indices, offsets
 
     @torch.jit.unused
