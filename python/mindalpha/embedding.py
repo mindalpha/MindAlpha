@@ -399,10 +399,10 @@ class EmbeddingOperator(torch.nn.Module):
         self._data.requires_grad = self.training and self.requires_grad
 
     @torch.jit.unused
-    def _combine_to_indices_and_offsets(self, ndarrays, feature_offset):
+    def _combine_to_indices_and_offsets(self, column_names, ndarrays, feature_offset):
         delim = self._checked_get_delimiter()
-        batch = IndexBatch(ndarrays, delim)
-        #print("##########YYYY######## {}\n".format(batch));
+        batch = IndexBatch(column_names, ndarrays, delim)
+        print("##########Y{}Y########\n".format(column_names));
         indices, offsets = self._combine_schema.combine_to_indices_and_offsets(self._minibatch_schema, batch, feature_offset)
         return indices, offsets
 
@@ -416,10 +416,10 @@ class EmbeddingOperator(torch.nn.Module):
         return keys
 
     @torch.jit.unused
-    def _combine(self, ndarrays):
+    def _combine(self, column_names, ndarrays):
         self._clean()
         self._ensure_combine_schema_loaded()
-        self._indices, self._indices_meta = self._do_combine(ndarrays)
+        self._indices, self._indices_meta = self._do_combine(column_names, ndarrays)
         self._keys = self._uniquify_hash_codes(self._indices)
 
     @torch.jit.unused
@@ -525,8 +525,8 @@ class EmbeddingOperator(torch.nn.Module):
 
 class EmbeddingSumConcat(EmbeddingOperator):
     @torch.jit.unused
-    def _do_combine(self, ndarrays):
-        return self._combine_to_indices_and_offsets(ndarrays, True)
+    def _do_combine(self, column_names, ndarrays):
+        return self._combine_to_indices_and_offsets(column_names, ndarrays, True)
 
     @torch.jit.unused
     def _do_compute(self):
@@ -539,8 +539,8 @@ class EmbeddingSumConcat(EmbeddingOperator):
 
 class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
-    def _do_combine(self, ndarrays):
-        return self._combine_to_indices_and_offsets(ndarrays, False)
+    def _do_combine(self, column_names, ndarrays):
+        return self._combine_to_indices_and_offsets(column_names, ndarrays, False)
 
     @torch.jit.unused
     def _do_compute(self):

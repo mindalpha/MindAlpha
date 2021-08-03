@@ -479,9 +479,9 @@ class SparseModel(Model):
             asyncio.run(self._sparse_tensors_prune_old(max_age))
         self.agent.barrier()
 
-    def _execute_combine(self, ndarrays):
+    def _execute_combine(self, column_list, ndarrays):
         for tensor in self._embedding_operators:
-            tensor.item._combine(ndarrays)
+            tensor.item._combine(column_list, ndarrays)
 
     def _execute_pull(self):
         asyncio.run(self._pull_tensors())
@@ -494,8 +494,8 @@ class SparseModel(Model):
         for mod in self._cast_operators:
             mod._cast(ndarrays)
 
-    def __call__(self, ndarrays):
-        self._execute_combine(ndarrays)
+    def __call__(self, column_names, ndarrays):
+        self._execute_combine(column_names, ndarrays)
         self._execute_pull()
         self._execute_compute()
         self._execute_cast(ndarrays)

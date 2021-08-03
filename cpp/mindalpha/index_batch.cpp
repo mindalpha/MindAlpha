@@ -37,10 +37,11 @@ void DebugPyArray(pybind11::array arr) {
                 padding_shape,
                 arr.strides(0));
 }
-IndexBatch::IndexBatch(pybind11::array columns, const std::string& delimiters) {
+IndexBatch::IndexBatch(pybind11::list column_names, pybind11::array columns, const std::string& delimiters) {
     if (columns.size() <= 0) {
         throw std::runtime_error("empty columns list");
     }
+    //DebugPyArray(column_names);
     split_columns_.reserve(columns.size());
     size_t rows = 0;
     size_t j = 0;
