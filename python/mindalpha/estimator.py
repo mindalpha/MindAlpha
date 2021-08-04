@@ -155,6 +155,9 @@ class PyTorchAgent(Agent):
             self.feed_validation_dataset()
 
     def feed_training_dataset(self):
+        return self.feed_training_dataset_dataframe()
+
+    def feed_training_dataset_dataframe(self):
         def feed_training_map_minibatch(iterator):
             for df in iterator:
                 self = __class__.get_instance()
@@ -175,20 +178,28 @@ class PyTorchAgent(Agent):
         df.groupBy(df[0]).count().show()
 
     def feed_validation_dataset(self):
+        return self.feed_validation_dataset_dataframe()
+
+    def feed_validation_dataset_dataframe(self):
         def feed_validation_map_minibatch(iterator):
             for df in iterator:
                 self = __class__.get_instance()
                 result = self.validate_minibatch_dataframe(df)
-                yield result
+                df[self.output_prediction_column_name]=result
+                yield df
         from pyspark.sql.types import FloatType
         from pyspark.sql.types import StructField
-        from pyspark.sql.types import StructType
-        schema = StructType([
-            StructField("validation", FloatType(), True)
-        ])
-        df = self.dataset.mapInPandas(feed_validation_map_minibatch, schema=schema).alias("validate")
+        import copy
+        schema = copy.deepcopy(self.dataset.schema)
+        schema.add(StructField(self.output_prediction_column_name, FloatType(), True))
+        df = self.dataset.mapInPandas(feed_validation_map_minibatch, schema=schema).alias("validation")
+
+        df = df.withColumn(self.output_label_column_name,
+                           df[self.input_label_column_index].cast(self.output_label_column_type))
+        df = df.withColumn(self.output_prediction_column_name,
+                           df[self.output_prediction_column_name].cast(self.output_prediction_column_type))
         df.cache()
-        df.show()
+        df.groupBy(df[0]).count().show()
 
     def feed_validation_dataset_udf(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,

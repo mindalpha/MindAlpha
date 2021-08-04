@@ -16,6 +16,7 @@
 
 #include <stdexcept>
 #include <mindalpha/index_batch.h>
+#include <mindalpha/debug.h>
 
 namespace mindalpha
 {
@@ -52,6 +53,7 @@ IndexBatch::IndexBatch(pybind11::list column_names, pybind11::array columns, con
         column_name_map_.emplace(col_name, column_names_.size());
         column_names_.emplace_back(col_name);
     }
+    dbg(column_name_map_);
     // fmt::print("load {} {} from {}\n", column_name_map_.size(), column_names_.size(), column_names.size());
     split_columns_.reserve(columns.size());
     size_t rows = 0;
