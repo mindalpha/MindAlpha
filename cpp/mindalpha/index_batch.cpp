@@ -53,7 +53,7 @@ IndexBatch::IndexBatch(pybind11::list column_names, pybind11::array columns, con
         column_name_map_.emplace(col_name, column_names_.size());
         column_names_.emplace_back(col_name);
     }
-    dbg(column_name_map_);
+    // dbg(column_name_map_);
     // fmt::print("load {} {} from {}\n", column_name_map_.size(), column_names_.size(), column_names.size());
     split_columns_.reserve(columns.size());
     size_t rows = 0;
@@ -70,15 +70,17 @@ IndexBatch::IndexBatch(pybind11::list column_names, pybind11::array columns, con
         pybind11::array arr = item.cast<pybind11::array>();
 #endif
         if (arr.dtype().kind() != 'O')
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
+            throw std::runtime_error(fmt::format("column {} is not numpy ndarray of object", j));
         StringViewColumn column = SplitColumn(arr, delimiters);
         if (j == 0)
             rows = column.size();
         else if (column.size() != rows)
-            throw std::runtime_error("column " + std::to_string(j) + " and column 0 are not of the same length; " +
-                                     std::to_string(column.size()) + " != " + std::to_string(rows));
+            throw std::runtime_error(fmt::format("column {} and column 0 are not of the same length; {} != {}",
+                                     j, column.size(), rows));
         split_columns_.push_back(std::move(column));
         ++j;
+    }
+    if (split_columns_.size()) {
     }
     if (rows == 0)
         throw std::runtime_error("number of rows is zero");
@@ -142,12 +144,14 @@ const StringViewHashVector& IndexBatch::GetCell(size_t i, size_t j, const std::s
     if (i >= rows_) {
         throw std::runtime_error(fmt::format("row index i is out of range; {}>={}", i, rows_));
     }
-    auto iter = column_name_map_.find(column_name);
-    if (iter == column_name_map_.end()) {
-        throw std::runtime_error(fmt::format("can't find {} in column_name_map element_size {}",
-                                 column_name, column_name_map_.size()));
+    if (column_names_.size()) {
+        auto iter = column_name_map_.find(column_name);
+        if (iter == column_name_map_.end()) {
+            throw std::runtime_error(fmt::format("can't find {} in column_name_map element_size {}",
+                                    column_name, column_name_map_.size()));
+        }
+        j = iter->second;
     }
-    j = iter->second;
     if (j >= split_columns_.size()) {
         throw std::runtime_error(fmt::format("column index j ({}) is out of range; {} >={}",
                                   column_name, j, split_columns_.size()));

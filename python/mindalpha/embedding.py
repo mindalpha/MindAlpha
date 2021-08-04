@@ -397,7 +397,10 @@ class EmbeddingOperator(torch.nn.Module):
     @torch.jit.unused
     def _combine_to_indices_and_offsets(self, minibatch, feature_offset):
         delim = self._checked_get_delimiter()
-        batch = IndexBatch(minibatch.column_names, minibatch.column_values, delim)
+        if minibatch.column_names is None:
+            batch = IndexBatch(minibatch.column_values, delim)
+        else:
+            batch = IndexBatch(minibatch.column_names, minibatch.column_values, delim)
         indices, offsets = self._combine_schema.combine_to_indices_and_offsets(batch, feature_offset)
         return indices, offsets
 

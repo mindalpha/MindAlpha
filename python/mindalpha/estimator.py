@@ -155,7 +155,7 @@ class PyTorchAgent(Agent):
             self.feed_validation_dataset()
 
     def feed_training_dataset(self):
-        return self.feed_training_dataset_dataframe()
+        return self.feed_training_dataset_udf()
 
     def feed_training_dataset_dataframe(self):
         def feed_training_map_minibatch(iterator):
@@ -178,7 +178,7 @@ class PyTorchAgent(Agent):
         df.groupBy(df[0]).count().show()
 
     def feed_validation_dataset(self):
-        return self.feed_validation_dataset_dataframe()
+        return self.feed_validation_dataset_udf()
 
     def feed_validation_dataset_dataframe(self):
         def feed_validation_map_minibatch(iterator):
@@ -241,9 +241,9 @@ class PyTorchAgent(Agent):
 
     def preprocess_minibatch(self, minibatch):
         import numpy as np
-        ndarrays = [col.values for col in minibatch]
+        mbatch = Minibatch(None, minibatch)
         labels = minibatch[self.input_label_column_index].values.astype(np.int64)
-        return ndarrays, labels
+        return mbatch, labels
 
     def process_minibatch_result(self, minibatch, result):
         import pandas as pd
@@ -263,7 +263,7 @@ class PyTorchAgent(Agent):
         import numpy as np
         labels = dataframe.index.values.astype(np.int64)
         labels = torch.from_numpy(labels).reshape(-1, 1)
-        minibatch = Minibatch(dataframe)
+        minibatch = Minibatch(dataframe, None)
         return minibatch, labels
 
     def train_minibatch_dataframe(self, dataframe):
@@ -280,10 +280,10 @@ class PyTorchAgent(Agent):
         import numpy as np
         return pd.DataFrame(result, dtype=np.float32)
 
-    def train_minibatch(self, minibatch):
+    def train_minibatch(self, batch):
         self.model.train()
-        ndarrays, labels = self.preprocess_minibatch(minibatch)
-        predictions = self.model(ndarrays)
+        minibatch, labels = self.preprocess_minibatch(batch)
+        predictions = self.model(minibatch)
         labels = torch.from_numpy(labels).reshape(-1, 1)
         loss = self.compute_loss(predictions, labels)
         self.trainer.train(loss)
@@ -300,10 +300,10 @@ class PyTorchAgent(Agent):
         import numpy as np
         return pd.DataFrame(result, dtype=np.float32)
 
-    def validate_minibatch(self, minibatch):
+    def validate_minibatch(self, batch):
         self.model.eval()
-        ndarrays, labels = self.preprocess_minibatch(minibatch)
-        predictions = self.model(ndarrays)
+        minibatch, labels = self.preprocess_minibatch(batch)
+        predictions = self.model(minibatch)
         labels = torch.from_numpy(labels).reshape(-1, 1)
         loss = self.compute_loss(predictions, labels)
         self.update_progress(predictions, labels)

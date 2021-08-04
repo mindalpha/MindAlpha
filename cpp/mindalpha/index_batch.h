@@ -39,7 +39,9 @@ public:
     size_t GetColumns() const { return split_columns_.size(); }
 
     std::string ToString() const;
-
+    size_t GetColumnNameSize() {
+        return column_names_.size();
+    }
 private:
     struct __attribute__((visibility("hidden"))) string_view_cell
     {
