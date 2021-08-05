@@ -193,7 +193,8 @@ class PyTorchAgent(Agent):
 
     def preprocess_minibatch_dataframe(self, dataframe):
         import numpy as np
-        labels = dataframe.index.values.astype(np.int64)
+        label_name = dataframe.columns[self.input_label_column_index]
+        labels = dataframe[label_name].values.astype(np.int64)
         labels = torch.from_numpy(labels).reshape(-1, 1)
         minibatch = [dataframe[name].values for name in dataframe.columns]
         return minibatch, labels
@@ -208,8 +209,10 @@ class PyTorchAgent(Agent):
         import pandas as pd
         import numpy as np
         return pd.DataFrame(result, dtype=np.float32)
+
     def feed_validation_dataset(self):
         return self.feed_validation_dataset_dataframe()
+
     def feed_validation_dataset_dataframe(self):
         def feed_validation_map_minibatch(iterator):
             for df in iterator:
