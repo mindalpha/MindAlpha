@@ -62,7 +62,7 @@ class PyTorchAgent(Agent):
         self.distribute_module()
         self.distribute_updater()
         self.start_workers()
-        if True:
+        if False:
             self.feed_dataset()
         else:
             self.feed_dataset_dataframe()
@@ -162,8 +162,6 @@ class PyTorchAgent(Agent):
         else:
             self.feed_validation_dataset()
 
-    def feed_training_dataset(self):
-        return self.feed_training_dataset_udf()
 
     def feed_training_dataset_dataframe(self):
         def feed_training_map_minibatch(iterator):
@@ -181,12 +179,9 @@ class PyTorchAgent(Agent):
         df.cache()
         df.show()
 
-    def feed_training_dataset_udf(self):
+    def feed_training_dataset(self):
         df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
         df.groupBy(df[0]).count().show()
-
-    def feed_validation_dataset(self):
-        return self.feed_validation_dataset_udf()
 
     def feed_validation_dataset_dataframe(self):
         def feed_validation_map_minibatch(iterator):
@@ -206,10 +201,11 @@ class PyTorchAgent(Agent):
                            df[self.input_label_column_index].cast(self.output_label_column_type))
         df = df.withColumn(self.output_prediction_column_name,
                            df[self.output_prediction_column_name].cast(self.output_prediction_column_type))
+        self.validation_result = df
         df.cache()
         df.groupBy(df[0]).count().show()
 
-    def feed_validation_dataset_udf(self):
+    def feed_validation_dataset(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,
                                      self.feed_validation_minibatch()(*self.dataset.columns))
         df = df.withColumn(self.output_label_column_name,
@@ -231,7 +227,6 @@ class PyTorchAgent(Agent):
         def _feed_training_minibatch(*minibatch):
             self = __class__.get_instance()
             result = self.train_minibatch(minibatch)
-            #print("feed_training {} with {}".format(result, minibatch))
             result = self.process_minibatch_result(minibatch, result)
             return result
         return _feed_training_minibatch
@@ -256,7 +251,6 @@ class PyTorchAgent(Agent):
     def process_minibatch_result(self, minibatch, result):
         import pandas as pd
         minibatch_size = len(minibatch[self.input_label_column_index])
-        #print("process {} {}".format(minibatch, self.input_label_column_index))
         if result is None:
             result = [0.0] * minibatch_size
         if len(result) != minibatch_size:
@@ -269,7 +263,8 @@ class PyTorchAgent(Agent):
 
     def preprocess_minibatch_dataframe(self, dataframe):
         import numpy as np
-        labels = dataframe.index.values.astype(np.int64)
+        label_name = dataframe.columns[self.input_label_column_index]
+        labels = dataframe[label_name].values.astype(np.int64)
         labels = torch.from_numpy(labels).reshape(-1, 1)
         minibatch = Minibatch(dataframe, None)
         return minibatch, labels
@@ -319,7 +314,6 @@ class PyTorchAgent(Agent):
 
     def compute_loss(self, predictions, labels):
         from .loss_utils import log_loss
-        #print("######### {}*{} and {}*{} #####\n".format(predictions.shape[0], predictions.shape[1], labels.shape[0], labels.shape[1]))
         return log_loss(predictions, labels) / labels.shape[0]
 
     def update_progress(self, predictions, labels):

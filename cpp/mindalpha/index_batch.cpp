@@ -23,22 +23,6 @@ namespace mindalpha
 IndexBatch::IndexBatch(const std::string& schema_file) {
 
 }
-void DebugPyArray(pybind11::array arr) {
-#if 0
-    auto padding_shape = 0;
-    if (arr.ndim() > 1) {
-        padding_shape = arr.shape(1);
-    }
-    fmt::print("######### {} {}:{}:{}\t{}:{}\t{}\n",
-                arr.dtype().kind(),
-                arr.ndim(),
-                arr.size(),
-                arr.itemsize(),
-                arr.shape(0),
-                padding_shape,
-                arr.strides(0));
-#endif
-}
 IndexBatch::IndexBatch(pybind11::list column_names, pybind11::list columns, const std::string& delimiters) {
     if (columns.size() <= 0) {
         throw std::runtime_error("empty columns list");
@@ -53,47 +37,16 @@ IndexBatch::IndexBatch(pybind11::list column_names, pybind11::list columns, cons
         column_name_map_.emplace(col_name, column_names_.size());
         column_names_.emplace_back(col_name);
     }
-    // dbg(column_name_map_);
-    // fmt::print("load {} {} from {}\n", column_name_map_.size(), column_names_.size(), column_names.size());
     ConvertColumn(columns, delimiters);
-/*
-    split_columns_.reserve(columns.size());
-    size_t rows = 0;
-    size_t j = 0;
-#if 1
-    DebugPyArray(columns);
-    for (auto & item : columns) {
-        pybind11::array arr = item.cast<pybind11::array>();
-#else
-    for (size_t j = 0; j < columns.size(); j++) {
-        const void* item_ptr = columns.data(j);
-        if (!pybind11::isinstance<pybind11::array>(item))
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray");
-        pybind11::array arr = item.cast<pybind11::array>();
-#endif
-        if (arr.dtype().kind() != 'O')
-            throw std::runtime_error(fmt::format("column {} is not numpy ndarray of object", j));
-        StringViewColumn column = SplitColumn(arr, delimiters);
-        if (j == 0)
-            rows = column.size();
-        else if (column.size() != rows)
-            throw std::runtime_error(fmt::format("column {} and column 0 are not of the same length; {} != {}",
-                                     j, column.size(), rows));
-        split_columns_.push_back(std::move(column));
-        ++j;
-    }
-    if (rows == 0)
-        throw std::runtime_error("number of rows is zero");
-    rows_ = rows;
-*/
 }
 IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters) {
    ConvertColumn(std::move(columns), delimiters);
 }
 void IndexBatch::ConvertColumn(pybind11::list columns, const std::string& delimiters)
 {
-    if (columns.empty())
+    if (columns.empty()) {
         throw std::runtime_error("empty columns list");
+    }
     split_columns_.reserve(columns.size());
     size_t rows = 0;
     for (size_t j = 0; j < columns.size(); j++)
@@ -110,30 +63,16 @@ void IndexBatch::ConvertColumn(pybind11::list columns, const std::string& delimi
         if (j == 0) {
             rows = column.size();
         }
-        else if (column.size() != rows) {
+        if (column.size() != rows) {
             throw std::runtime_error(fmt::format("column {} and column 0 are not of the same length; {} != {}",
                                      j, column.size(), rows));
         }
         split_columns_.push_back(std::move(column));
     }
-    if (rows == 0)
+    if (rows == 0) {
         throw std::runtime_error("number of rows is zero");
-    rows_ = rows;
-
-    dbg(fmt::format("{} {} {}", rows, columns.size(), split_columns_.size()));
-    for (size_t i = 0UL; i < columns.size(); i += 10) {
-        auto& cell  = split_columns_[i];
-        std::string debug_str;
-        for (size_t j = 0UL; j < cell.size(); j +=30) {
-            auto& items = cell[j].items_;
-            std::string_view value = "none";
-            if (items.size()) {
-                value = items[0].view_;
-            }
-            debug_str.append(fmt::format("cell[{}][{}]={},", i, j, value));
-        }
-        dbg(fmt::format("column[{}]={}", i, debug_str));
     }
+    rows_ = rows;
 }
 
 IndexBatch::StringViewColumn
