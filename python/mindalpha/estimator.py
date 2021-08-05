@@ -231,6 +231,7 @@ class PyTorchAgent(Agent):
                            df[self.input_label_column_index].cast(self.output_label_column_type))
         df = df.withColumn(self.output_prediction_column_name,
                            df[self.output_prediction_column_name].cast(self.output_prediction_column_type))
+        self.validation_result = df
         df.cache()
         df.groupBy(df[0]).count().show()
 
