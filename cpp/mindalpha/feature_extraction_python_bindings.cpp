@@ -116,7 +116,7 @@ py::class_<mindalpha::IndexBatch, std::shared_ptr<mindalpha::IndexBatch>>(m, "In
     .def_property_readonly("columns", &mindalpha::IndexBatch::GetColumns)
     .def(py::init<const std::string&>())
     .def(py::init<py::list, const std::string&>())
-    .def(py::init<py::list, py::array, const std::string&>())
+    .def(py::init<py::list, py::list, const std::string&>())
     .def("to_list", &mindalpha::IndexBatch::ToList)
     .def("__str__", &mindalpha::IndexBatch::ToString)
     ;

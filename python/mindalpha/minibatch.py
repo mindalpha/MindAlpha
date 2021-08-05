@@ -6,8 +6,12 @@ class Minibatch(object):
             self._column_names = None
             self._column_names_map = None
         else:
-            ndarrays = dataframe.to_numpy()
-            self._column_values = ndarrays.T
+            if False:
+                ndarrays = dataframe.to_numpy()
+                self._column_values = ndarrays.T
+            else:
+                # https://datatofish.com/convert-pandas-dataframe-to-list
+                self._column_values = [col for col in dataframe.values.T]
             self._column_names = [col for  col in dataframe.columns]
             self._column_names_map = {col:idx for idx, col in enumerate(dataframe.columns)}
 

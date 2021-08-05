@@ -62,7 +62,10 @@ class PyTorchAgent(Agent):
         self.distribute_module()
         self.distribute_updater()
         self.start_workers()
-        self.feed_dataset()
+        if True:
+            self.feed_dataset()
+        else:
+            self.feed_dataset_dataframe()
         self.collect_module()
         self.stop_workers()
 
@@ -148,6 +151,11 @@ class PyTorchAgent(Agent):
             self.save_model()
             self.export_model()
 
+    def feed_dataset_dataframe(self):
+        if self.is_training_mode:
+            self.feed_training_dataset_dataframe()
+        else:
+            self.feed_validation_dataset_dataframe()
     def feed_dataset(self):
         if self.is_training_mode:
             self.feed_training_dataset()
@@ -311,6 +319,7 @@ class PyTorchAgent(Agent):
 
     def compute_loss(self, predictions, labels):
         from .loss_utils import log_loss
+        #print("######### {}*{} and {}*{} #####\n".format(predictions.shape[0], predictions.shape[1], labels.shape[0], labels.shape[1]))
         return log_loss(predictions, labels) / labels.shape[0]
 
     def update_progress(self, predictions, labels):

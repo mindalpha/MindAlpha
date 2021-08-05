@@ -28,7 +28,7 @@ class __attribute__((visibility("hidden"))) IndexBatch
 public:
     IndexBatch(const std::string& schema_file);
     IndexBatch(pybind11::list columns, const std::string& delimiters);
-    IndexBatch(pybind11::list column_names, pybind11::array columns, const std::string& delimiters);
+    IndexBatch(pybind11::list column_names, pybind11::list columns, const std::string& delimiters);
 
     void ConvertColumn(pybind11::list columns, const std::string& delimiters);
     const StringViewHashVector& GetCell(size_t i, size_t j, const std::string& column_name) const;
