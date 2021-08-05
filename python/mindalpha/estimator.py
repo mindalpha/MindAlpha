@@ -154,10 +154,84 @@ class PyTorchAgent(Agent):
             self.feed_validation_dataset()
 
     def feed_training_dataset(self):
+        return self.feed_training_dataset_dataframe()
+
+    def feed_training_dataset_dataframe(self):
+        def feed_training_map_minibatch(iterator):
+            for df in iterator:
+                self = __class__.get_instance()
+                result = self.train_minibatch_dataframe(df)
+                yield result
+        from pyspark.sql.types import FloatType
+        from pyspark.sql.types import StructField
+        from pyspark.sql.types import StructType
+        schema = StructType([
+            StructField("train", FloatType(), True)
+        ])
+        df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=schema).alias('train')
+        df.cache()
+        df.show()
+
+    def feed_training_dataset_udf(self):
         df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
         df.groupBy(df[0]).count().show()
 
+
+    def train_minibatch_dataframe(self, dataframe):
+        self.model.train()
+        minibatch, labels = self.preprocess_minibatch_dataframe(dataframe)
+        predictions = self.model(minibatch)
+        loss = self.compute_loss(predictions, labels)
+        self.trainer.train(loss)
+        self.update_progress(predictions, labels)
+
+        minibatch_size = len(dataframe.index.values)
+        result = [0.0] * minibatch_size
+        import pandas as pd
+        import numpy as np
+        return pd.DataFrame(result, dtype=np.float32)
+
+    def preprocess_minibatch_dataframe(self, dataframe):
+        import numpy as np
+        labels = dataframe.index.values.astype(np.int64)
+        labels = torch.from_numpy(labels).reshape(-1, 1)
+        minibatch = [dataframe[name].values for name in dataframe.columns]
+        return minibatch, labels
+
+    def validate_minibatch_dataframe(self, dataframe):
+        self.model.eval()
+        minibatch, labels = self.preprocess_minibatch_dataframe(dataframe)
+        predictions = self.model(minibatch)
+        loss = self.compute_loss(predictions, labels)
+        self.update_progress(predictions, labels)
+        result = predictions.detach().reshape(-1)
+        import pandas as pd
+        import numpy as np
+        return pd.DataFrame(result, dtype=np.float32)
     def feed_validation_dataset(self):
+        return self.feed_validation_dataset_dataframe()
+    def feed_validation_dataset_dataframe(self):
+        def feed_validation_map_minibatch(iterator):
+            for df in iterator:
+                self = __class__.get_instance()
+                result = self.validate_minibatch_dataframe(df)
+                df[self.output_prediction_column_name]=result
+                yield df
+        from pyspark.sql.types import FloatType
+        from pyspark.sql.types import StructField
+        import copy
+        schema = copy.deepcopy(self.dataset.schema)
+        schema.add(StructField(self.output_prediction_column_name, FloatType(), True))
+        df = self.dataset.mapInPandas(feed_validation_map_minibatch, schema=schema).alias("validation")
+
+        df = df.withColumn(self.output_label_column_name,
+                           df[self.input_label_column_index].cast(self.output_label_column_type))
+        df = df.withColumn(self.output_prediction_column_name,
+                           df[self.output_prediction_column_name].cast(self.output_prediction_column_type))
+        df.cache()
+        df.groupBy(df[0]).count().show()
+
+    def feed_validation_dataset_udf(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,
                                      self.feed_validation_minibatch()(*self.dataset.columns))
         df = df.withColumn(self.output_label_column_name,
