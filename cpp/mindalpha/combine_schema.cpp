@@ -186,7 +186,10 @@ CombineSchema::CombineToIndicesAndOffsets(const IndexBatch& batch, bool feature_
 const StringViewHashVector*
 CombineSchema::GetCell(const IndexBatch& batch, size_t i, const std::string& column_name) const
 {
-    const size_t column_index = column_name_map_.at(column_name);
+    size_t column_index = -1;
+    if (column_name_map_.size()) {
+        column_index = column_name_map_.at(column_name);
+    }
     const StringViewHashVector& vec = batch.GetCell(i, column_index, column_name);
     return vec.empty() ? nullptr : &vec;
 }

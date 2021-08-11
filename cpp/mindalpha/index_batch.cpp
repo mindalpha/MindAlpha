@@ -16,34 +16,62 @@
 
 #include <stdexcept>
 #include <mindalpha/index_batch.h>
+#include <mindalpha/debug.h>
 
 namespace mindalpha
 {
+IndexBatch::IndexBatch(const std::string& schema_file) {
 
-IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters)
-{
-    if (columns.empty())
+}
+IndexBatch::IndexBatch(pybind11::list column_names, pybind11::list columns, const std::string& delimiters) {
+    if (columns.size() <= 0) {
         throw std::runtime_error("empty columns list");
+    }
+    column_names_.reserve(column_names.size());
+    for (auto & col : column_names) {
+        //https://github.com/pybind/pybind11/issues/1201
+        auto o = pybind11::cast<pybind11::object>(col);
+        auto [str, obj] = get_string_object_tuple(o);
+        // todo compare with string_view
+        std::string col_name(str.data(), str.size());
+        column_name_map_.emplace(col_name, column_names_.size());
+        column_names_.emplace_back(col_name);
+    }
+    ConvertColumn(columns, delimiters);
+}
+IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters) {
+   ConvertColumn(std::move(columns), delimiters);
+}
+void IndexBatch::ConvertColumn(pybind11::list columns, const std::string& delimiters)
+{
+    if (columns.empty()) {
+        throw std::runtime_error("empty columns list");
+    }
     split_columns_.reserve(columns.size());
     size_t rows = 0;
     for (size_t j = 0; j < columns.size(); j++)
     {
         pybind11::object item = columns[j];
-        if (!pybind11::isinstance<pybind11::array>(item))
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray");
+        if (!pybind11::isinstance<pybind11::array>(item)) {
+            throw std::runtime_error(fmt::format("column {} is not numpy ndarray, but {}", j));
+        }
         pybind11::array arr = item.cast<pybind11::array>();
-        if (arr.dtype().kind() != 'O')
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
+        if (arr.dtype().kind() != 'O') {
+            throw std::runtime_error(fmt::format("column {} is not numpy ndarray of object", j));
+        }
         StringViewColumn column = SplitColumn(arr, delimiters);
-        if (j == 0)
+        if (j == 0) {
             rows = column.size();
-        else if (column.size() != rows)
-            throw std::runtime_error("column " + std::to_string(j) + " and column 0 are not of the same length; " +
-                                     std::to_string(column.size()) + " != " + std::to_string(rows));
+        }
+        if (column.size() != rows) {
+            throw std::runtime_error(fmt::format("column {} and column 0 are not of the same length; {} != {}",
+                                     j, column.size(), rows));
+        }
         split_columns_.push_back(std::move(column));
     }
-    if (rows == 0)
+    if (rows == 0) {
         throw std::runtime_error("number of rows is zero");
+    }
     rows_ = rows;
 }
 
@@ -53,11 +81,15 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
     const size_t rows = column.size();
     StringViewColumn output;
     output.reserve(rows);
+#if 1
+    for (auto& item: column) {
+#else
     for (size_t i = 0; i < rows; i++)
     {
         const void* item_ptr = column.data(i);
         // Consider avoiding complex casting here.
         PyObject* item = (PyObject*)(*(void**)item_ptr);
+#endif
         pybind11::object cell = pybind11::reinterpret_borrow<pybind11::object>(item);
         auto [str, obj] = get_string_object_tuple(cell);
         auto items = SplitFilterStringViewHash(str, delims);
@@ -68,11 +100,21 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
 
 const StringViewHashVector& IndexBatch::GetCell(size_t i, size_t j, const std::string& column_name) const
 {
-    if (i >= rows_)
-        throw std::runtime_error("row index i is out of range; " + std::to_string(i) + " >= " + std::to_string(rows_));
-    if (j >= split_columns_.size())
-        throw std::runtime_error("column index j (" + column_name + ") is out of range; " + std::to_string(j) +
-                                 " >= " + std::to_string(split_columns_.size()));
+    if (i >= rows_) {
+        throw std::runtime_error(fmt::format("row index i is out of range; {}>={}", i, rows_));
+    }
+    if (column_names_.size()) {
+        auto iter = column_name_map_.find(column_name);
+        if (iter == column_name_map_.end()) {
+            throw std::runtime_error(fmt::format("can't find {} in column_name_map element_size {}",
+                                    column_name, column_name_map_.size()));
+        }
+        j = iter->second;
+    }
+    if (j >= split_columns_.size()) {
+        throw std::runtime_error(fmt::format("column index j ({}) is out of range; {} >={}",
+                                  column_name, j, split_columns_.size()));
+    }
     auto& column = split_columns_.at(j);
     return column.at(i).items_;
 }
@@ -101,7 +143,7 @@ pybind11::list IndexBatch::ToList() const
 
 std::string IndexBatch::ToString() const
 {
-    return "[IndexBatch: " + std::to_string(GetRows()) + " x " + std::to_string(GetColumns()) + "]";
+    return fmt::format("[IndexBatch: {} x {}]", GetRows(), GetColumns());
 }
 
 }

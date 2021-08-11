@@ -17,6 +17,7 @@
 from ._mindalpha import NodeRole
 from ._mindalpha import ActorConfig
 from ._mindalpha import PSRunner
+from ._mindalpha import MinibatchSchema
 
 from .embedding import EmbeddingSumConcat
 from .embedding import EmbeddingRangeSum

@@ -395,9 +395,12 @@ class EmbeddingOperator(torch.nn.Module):
         self._data.requires_grad = self.training and self.requires_grad
 
     @torch.jit.unused
-    def _combine_to_indices_and_offsets(self, ndarrays, feature_offset):
+    def _combine_to_indices_and_offsets(self, minibatch, feature_offset):
         delim = self._checked_get_delimiter()
-        batch = IndexBatch(ndarrays, delim)
+        if minibatch.column_names is None:
+            batch = IndexBatch(minibatch.column_values, delim)
+        else:
+            batch = IndexBatch(minibatch.column_names, minibatch.column_values, delim)
         indices, offsets = self._combine_schema.combine_to_indices_and_offsets(batch, feature_offset)
         return indices, offsets
 
@@ -411,10 +414,10 @@ class EmbeddingOperator(torch.nn.Module):
         return keys
 
     @torch.jit.unused
-    def _combine(self, ndarrays):
+    def _combine(self, minibatch):
         self._clean()
         self._ensure_combine_schema_loaded()
-        self._indices, self._indices_meta = self._do_combine(ndarrays)
+        self._indices, self._indices_meta = self._do_combine(minibatch)
         self._keys = self._uniquify_hash_codes(self._indices)
 
     @torch.jit.unused
@@ -520,8 +523,8 @@ class EmbeddingOperator(torch.nn.Module):
 
 class EmbeddingSumConcat(EmbeddingOperator):
     @torch.jit.unused
-    def _do_combine(self, ndarrays):
-        return self._combine_to_indices_and_offsets(ndarrays, True)
+    def _do_combine(self, minibatch):
+        return self._combine_to_indices_and_offsets(minibatch, True)
 
     @torch.jit.unused
     def _do_compute(self):
@@ -534,8 +537,8 @@ class EmbeddingSumConcat(EmbeddingOperator):
 
 class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
-    def _do_combine(self, ndarrays):
-        return self._combine_to_indices_and_offsets(ndarrays, False)
+    def _do_combine(self, minibatch):
+        return self._combine_to_indices_and_offsets(minibatch, False)
 
     @torch.jit.unused
     def _do_compute(self):

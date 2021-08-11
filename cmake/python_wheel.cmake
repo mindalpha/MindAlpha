@@ -25,6 +25,7 @@ set(python_files
     python/mindalpha/initializer.py
     python/mindalpha/updater.py
     python/mindalpha/model.py
+    python/mindalpha/minibatch.py
     python/mindalpha/distributed_trainer.py
     python/mindalpha/distributed_tensor.py
     python/mindalpha/agent.py

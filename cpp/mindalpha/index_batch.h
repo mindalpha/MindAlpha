@@ -26,8 +26,11 @@ namespace mindalpha
 class __attribute__((visibility("hidden"))) IndexBatch
 {
 public:
+    IndexBatch(const std::string& schema_file);
     IndexBatch(pybind11::list columns, const std::string& delimiters);
+    IndexBatch(pybind11::list column_names, pybind11::list columns, const std::string& delimiters);
 
+    void ConvertColumn(pybind11::list columns, const std::string& delimiters);
     const StringViewHashVector& GetCell(size_t i, size_t j, const std::string& column_name) const;
 
     pybind11::list ToList() const;
@@ -36,7 +39,9 @@ public:
     size_t GetColumns() const { return split_columns_.size(); }
 
     std::string ToString() const;
-
+    size_t GetColumnNameSize() {
+        return column_names_.size();
+    }
 private:
     struct __attribute__((visibility("hidden"))) string_view_cell
     {
@@ -50,6 +55,9 @@ private:
 
     std::vector<StringViewColumn> split_columns_;
     size_t rows_;
+
+    std::unordered_map<std::string, int> column_name_map_;
+    std::vector<std::string> column_names_;
 };
 
 }
