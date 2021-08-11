@@ -18,7 +18,6 @@ import asyncio
 import os
 import numpy
 import torch
-from ._mindalpha import MinibatchSchema
 from ._mindalpha import CombineSchema
 from ._mindalpha import IndexBatch
 from ._mindalpha import HashUniquifier
@@ -75,7 +74,6 @@ class EmbeddingOperator(torch.nn.Module):
         self._distributed_tensor = None
         self._combine_schema_source = None
         self._combine_schema = None
-        self._minibatch_schema = None
         if self._column_name_file_path is not None and self._combine_schema_file_path is not None:
             self._load_combine_schema()
         self._clean()
@@ -89,8 +87,6 @@ class EmbeddingOperator(torch.nn.Module):
         else:
             column_name_file_path = self._checked_get_column_name_file_path()
         combine_schema_file_path = self._checked_get_combine_schema_file_path()
-        self._minibatch_schema = MinibatchSchema()
-        self._minibatch_schema.load_column_name_from_file(use_s3(column_name_file_path))
         self._combine_schema = CombineSchema()
         self._combine_schema.load_column_name_from_file(use_s3(column_name_file_path))
         self._combine_schema.load_combine_schema_from_file(use_s3(combine_schema_file_path))
@@ -399,10 +395,13 @@ class EmbeddingOperator(torch.nn.Module):
         self._data.requires_grad = self.training and self.requires_grad
 
     @torch.jit.unused
-    def _combine_to_indices_and_offsets(self, ndarrays, feature_offset):
+    def _combine_to_indices_and_offsets(self, minibatch, feature_offset):
         delim = self._checked_get_delimiter()
-        batch = IndexBatch(ndarrays, delim)
-        indices, offsets = self._combine_schema.combine_to_indices_and_offsets(self._minibatch_schema, batch, feature_offset)
+        if minibatch.column_names is None:
+            batch = IndexBatch(minibatch.column_values, delim)
+        else:
+            batch = IndexBatch(minibatch.column_names, minibatch.column_values, delim)
+        indices, offsets = self._combine_schema.combine_to_indices_and_offsets(batch, feature_offset)
         return indices, offsets
 
     @torch.jit.unused
@@ -415,10 +414,10 @@ class EmbeddingOperator(torch.nn.Module):
         return keys
 
     @torch.jit.unused
-    def _combine(self, ndarrays):
+    def _combine(self, minibatch):
         self._clean()
         self._ensure_combine_schema_loaded()
-        self._indices, self._indices_meta = self._do_combine(ndarrays)
+        self._indices, self._indices_meta = self._do_combine(minibatch)
         self._keys = self._uniquify_hash_codes(self._indices)
 
     @torch.jit.unused
@@ -524,8 +523,8 @@ class EmbeddingOperator(torch.nn.Module):
 
 class EmbeddingSumConcat(EmbeddingOperator):
     @torch.jit.unused
-    def _do_combine(self, ndarrays):
-        return self._combine_to_indices_and_offsets(ndarrays, True)
+    def _do_combine(self, minibatch):
+        return self._combine_to_indices_and_offsets(minibatch, True)
 
     @torch.jit.unused
     def _do_compute(self):
@@ -538,8 +537,8 @@ class EmbeddingSumConcat(EmbeddingOperator):
 
 class EmbeddingRangeSum(EmbeddingOperator):
     @torch.jit.unused
-    def _do_combine(self, ndarrays):
-        return self._combine_to_indices_and_offsets(ndarrays, False)
+    def _do_combine(self, minibatch):
+        return self._combine_to_indices_and_offsets(minibatch, False)
 
     @torch.jit.unused
     def _do_compute(self):

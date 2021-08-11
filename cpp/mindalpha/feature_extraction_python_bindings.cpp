@@ -50,10 +50,9 @@ py::class_<mindalpha::CombineSchema, std::shared_ptr<mindalpha::CombineSchema>>(
          })
     .def("combine_to_indices_and_offsets",
          [](const mindalpha::CombineSchema& schema,
-            const mindalpha::MinibatchSchema& batch_schema,
             const mindalpha::IndexBatch& batch, bool feature_offset)
          {
-             auto [indices, offsets] = schema.CombineToIndicesAndOffsets(batch_schema, batch, feature_offset);
+             auto [indices, offsets] = schema.CombineToIndicesAndOffsets(batch, feature_offset);
              py::array indices_arr = mindalpha::to_numpy_array(std::move(indices));
              py::array offsets_arr = mindalpha::to_numpy_array(std::move(offsets));
              return py::make_tuple(indices_arr, offsets_arr);
@@ -117,6 +116,7 @@ py::class_<mindalpha::IndexBatch, std::shared_ptr<mindalpha::IndexBatch>>(m, "In
     .def_property_readonly("columns", &mindalpha::IndexBatch::GetColumns)
     .def(py::init<const std::string&>())
     .def(py::init<py::list, const std::string&>())
+    .def(py::init<py::list, py::list, const std::string&>())
     .def("to_list", &mindalpha::IndexBatch::ToList)
     .def("__str__", &mindalpha::IndexBatch::ToString)
     ;
