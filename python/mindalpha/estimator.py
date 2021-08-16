@@ -177,7 +177,7 @@ class PyTorchAgent(Agent):
         ])
         df = self.dataset.mapInPandas(feed_training_map_minibatch, schema=schema).alias('train')
         df.cache()
-        df.show()
+        df.collect()
 
     def feed_training_dataset(self):
         df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
