@@ -271,7 +271,7 @@ void DefineTensorStoreBindings(pybind11::module& m)
                              (*func)();
                          }, is_value);
                      })
-        .def("pull", [](mindalpha::SparseTensor& self, py::array keys, py::object cb, bool read_only)
+        .def("pull", [](mindalpha::SparseTensor& self, py::array keys, py::object cb, bool read_only, bool nan_fill)
                      {
                          auto keys_obj = mindalpha::make_shared_pyobject(keys);
                          void* keys_data_ptr = const_cast<void*>(keys.data(0));
@@ -291,7 +291,7 @@ void DefineTensorStoreBindings(pybind11::module& m)
                                  shape[1 + i] = static_cast<int64_t>(slice_shape.at(i));
                              out_arr = out_arr.attr("reshape")(shape);
                              (*func)(out_arr);
-                         }, read_only);
+                         }, read_only, nan_fill);
                      })
         .def("load", [](mindalpha::SparseTensor& self, const std::string& dir_path, py::object cb, bool keep_meta)
                      {
@@ -302,14 +302,14 @@ void DefineTensorStoreBindings(pybind11::module& m)
                              (*func)();
                          }, keep_meta);
                      })
-        .def("save", [](mindalpha::SparseTensor& self,  const std::string& dir_path, py::object cb)
+        .def("save", [](mindalpha::SparseTensor& self,  const std::string& dir_path, py::object cb, bool text_mode)
                      {
                          auto func = mindalpha::make_shared_pyobject(cb);
                          py::gil_scoped_release gil;
                          self.Save(dir_path, [func]() {
                              py::gil_scoped_acquire gil;
                              (*func)();
-                         });
+                         }, text_mode);
                      })
         .def("export", [](mindalpha::SparseTensor& self,  const std::string& dir_path, py::object cb)
                      {
@@ -321,14 +321,15 @@ void DefineTensorStoreBindings(pybind11::module& m)
                          });
                      })
         .def("import_from", [](mindalpha::SparseTensor& self, const std::string& meta_file_path, py::object cb,
-                               bool data_only, bool skip_existing)
+                               bool data_only, bool skip_existing,
+                               bool transform_key, const std::string& feature_name)
                             {
                                 auto func = mindalpha::make_shared_pyobject(cb);
                                 py::gil_scoped_release gil;
                                 self.ImportFrom(meta_file_path, [func]() {
                                     py::gil_scoped_acquire gil;
                                     (*func)();
-                                }, data_only, skip_existing);
+                                }, data_only, skip_existing, transform_key, feature_name);
                             })
         .def("prune_small", [](mindalpha::SparseTensor& self,  double epsilon, py::object cb)
                      {

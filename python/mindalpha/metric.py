@@ -23,10 +23,10 @@ class ModelMetric(object):
         self._buffer_size = buffer_size
         self._threshold = threshold
         self._beta = beta
-        self._positive_buffer = numpy.zeros(buffer_size, dtype=numpy.int64)
-        self._negative_buffer = numpy.zeros(buffer_size, dtype=numpy.int64)
+        self._positive_buffer = numpy.zeros(buffer_size, dtype=numpy.float64)
+        self._negative_buffer = numpy.zeros(buffer_size, dtype=numpy.float64)
         self._prediction_sum = 0.0
-        self._label_sum = 0
+        self._label_sum = 0.0
         self._instance_num = 0
         self._true_positive = 0
         self._true_negative = 0
@@ -46,10 +46,10 @@ class ModelMetric(object):
         return self._instance_num
 
     def clear(self):
-        self._positive_buffer.fill(0)
-        self._negative_buffer.fill(0)
+        self._positive_buffer.fill(0.0)
+        self._negative_buffer.fill(0.0)
         self._prediction_sum = 0.0
-        self._label_sum = 0
+        self._label_sum = 0.0
         self._instance_num = 0
         self._true_positive = 0
         self._true_negative = 0
@@ -68,6 +68,8 @@ class ModelMetric(object):
         self._false_negative += other._false_negative
 
     def accumulate(self, predictions, labels):
+        if labels.dtype != numpy.float32:
+            labels = labels.astype(numpy.float32)
         ModelMetricBuffer.update_buffer(self._positive_buffer, self._negative_buffer,
                                         predictions, labels)
         self._prediction_sum += predictions.sum()
@@ -76,8 +78,8 @@ class ModelMetric(object):
         if self.threshold > 0.0:
             predicted_positive = predictions > self._threshold
             predicted_negative = predictions <= self._threshold
-            actually_positive = labels == 1
-            actually_negative = labels == 0
+            actually_positive = labels > self._threshold
+            actually_negative = labels <= self._threshold
             self._true_positive += (predicted_positive & actually_positive).sum()
             self._true_negative += (predicted_negative & actually_negative).sum()
             self._false_positive += (predicted_positive & actually_negative).sum()
@@ -88,7 +90,7 @@ class ModelMetric(object):
         return auc
 
     def compute_pcoc(self):
-        if self._label_sum == 0:
+        if self._label_sum == 0.0:
             return float('nan')
         return self._prediction_sum / self._label_sum
 
@@ -133,7 +135,7 @@ class ModelMetric(object):
         return string
 
     def _get_pack_format(self):
-        return 'dll' + 'l' * 4
+        return 'ddl' + 'l' * 4
 
     def get_states(self):
         scalars = self._prediction_sum,

@@ -15,7 +15,6 @@
 //
 
 #include <mindalpha/io.h>
-#include <mindalpha/string_utils.h>
 #include <mindalpha/combine_schema.h>
 
 namespace mindalpha

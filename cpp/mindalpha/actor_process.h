@@ -21,6 +21,7 @@
 #include <memory>
 #include <utility>
 #include <mutex>
+#include <condition_variable>
 #include <future>
 #include <unordered_map>
 #include <unordered_set>
@@ -55,6 +56,10 @@ public:
     void Stop();
 
 private:
+    bool IsReady();
+    void SetIsReady(bool value);
+    void WaitReady();
+
     bool HandleDataMessage(Message&& msg);
 
 #undef MINDALPHA_NODE_CONTROL_COMMAND_DEF
@@ -71,7 +76,9 @@ private:
     std::unordered_map<std::string, int> connected_nodes_;
     std::unordered_map<int, int> shared_node_mapping_;
     std::vector<int> barrier_counter_;
-    std::atomic<bool> ready_{false};
+    bool ready_{false};
+    std::mutex ready_mutex_;
+    std::condition_variable ready_cv_;
     std::atomic<int64_t> message_counter_{0};
     std::atomic<int64_t> send_bytes_{0};
     std::atomic<int64_t> receive_bytes_{0};

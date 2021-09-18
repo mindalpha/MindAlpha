@@ -39,8 +39,10 @@ public:
     void Init(std::function<void()> cb);
     void Dispose(std::function<void()> cb);
     void Clear(std::function<void()> cb);
-    void Push(SmartArray<uint8_t> keys, SmartArray<uint8_t> in, std::function<void()> cb, bool is_value = false);
-    void Pull(SmartArray<uint8_t> keys, std::function<void(SmartArray<uint8_t> out)> cb, bool read_only = false);
+    void Push(SmartArray<uint8_t> keys, SmartArray<uint8_t> in, std::function<void()> cb,
+              bool is_value = false);
+    void Pull(SmartArray<uint8_t> keys, std::function<void(SmartArray<uint8_t> out)> cb,
+              bool read_only = false, bool nan_fill = false);
     void PushPartition(ArrayHashMap<uint64_t, uint8_t>& data, std::function<void()> cb,
                        bool data_only = false, bool skip_existing = false);
     void PullPartition(ArrayHashMap<uint64_t, uint8_t>& data, std::function<void()> cb,
@@ -48,10 +50,11 @@ public:
     void PushMeta(const SparseTensorMeta& meta, std::function<void()> cb);
     void PullMeta(std::function<void(SparseTensorMeta meta)> cb);
     void Load(const std::string& dir_path, std::function<void()> cb, bool keep_meta = false);
-    void Save(const std::string& dir_path, std::function<void()> cb);
+    void Save(const std::string& dir_path, std::function<void()> cb, bool text_mode = false);
     void Export(const std::string& dir_path, std::function<void()> cb);
     void ImportFrom(const std::string& meta_file_path, std::function<void()> cb,
-                    bool data_only = false, bool skip_existing = false);
+                    bool data_only = false, bool skip_existing = false,
+                    bool transform_key = false, const std::string& feature_name = "");
     void PruneSmall(double epsilon, std::function<void()> cb);
     void PruneOld(int max_age, std::function<void()> cb);
 

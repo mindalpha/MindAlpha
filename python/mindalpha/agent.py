@@ -368,13 +368,13 @@ class Agent(object):
         for epoch in range(nepoches):
             df = self.load_dataset(dataset_path)
             df = df.select(self.feed_training_minibatch()(*df.columns).alias('train'))
-            df.groupBy(df[0]).count().show()
+            df.write.format('noop').mode('overwrite').save()
 
     def feed_validation_dataset(self, dataset_path, nepoches=1):
         for epoch in range(nepoches):
             df = self.load_dataset(dataset_path)
             df = df.select(self.feed_validation_minibatch()(*df.columns).alias('validate'))
-            df.groupBy(df[0]).count().show()
+            df.write.format('noop').mode('overwrite').save()
 
     def feed_training_minibatch(self):
         from pyspark.sql.types import FloatType

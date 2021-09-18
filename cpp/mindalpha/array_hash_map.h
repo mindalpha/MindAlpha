@@ -434,6 +434,16 @@ public:
         hint.append("\"; ");
         MapFileHeader header;
         read(static_cast<void*>(&header), sizeof(header), hint, "map file header");
+        DeserializeWithHeader(path, read, header);
+    }
+
+    template<typename Func>
+    void DeserializeWithHeader(const std::string& path, Func read, const MapFileHeader& header)
+    {
+        std::string hint;
+        hint.append("Fail to deserialize ArrayHashMap from \"");
+        hint.append(path);
+        hint.append("\"; ");
         header.Validate(hint);
         uint64_t value_count = header.value_count;
         uint64_t value_count_per_key = header.value_count_per_key;

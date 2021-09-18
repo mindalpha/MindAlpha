@@ -238,7 +238,10 @@ void EnsureLocalDirectory(const std::string& dir_path)
 std::string DirName(const std::string& path)
 {
     size_t i = path.rfind('/');
-    return path.substr(0, i);
+    if (i == std::string::npos)
+        return {};
+    else
+        return path.substr(0, i);
 }
 
 std::string JoinPath(const std::string& dir_path, const std::string& file_name)

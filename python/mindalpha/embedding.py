@@ -37,7 +37,12 @@ class EmbeddingOperator(torch.nn.Module):
                  requires_grad=True,
                  updater=None,
                  initializer=None,
-                 alternative_column_name_file_path=None):
+                 alternative_column_name_file_path=None,
+                 output_batchsize1_if_only_level0=False,
+                 use_nan_fill=False,
+                 save_as_text=False,
+                 embedding_bag_mode='sum',
+                ):
         if embedding_size is not None:
             if not isinstance(embedding_size, int) or embedding_size <= 0:
                 raise TypeError(f"embedding_size must be positive integer; {embedding_size!r} is invalid")
@@ -61,6 +66,7 @@ class EmbeddingOperator(torch.nn.Module):
         if alternative_column_name_file_path is not None:
             if not isinstance(alternative_column_name_file_path, str) or not file_exists(alternative_column_name_file_path):
                 raise RuntimeError(f"alternative column name file {alternative_column_name_file_path!r} not found")
+        self._check_embedding_bag_mode(embedding_bag_mode)
         super().__init__()
         self._embedding_size = embedding_size
         self._column_name_file_path = column_name_file_path
@@ -70,7 +76,13 @@ class EmbeddingOperator(torch.nn.Module):
         self._requires_grad = requires_grad
         self._updater = updater
         self._initializer = initializer
+        self._is_backing = False
+        self._is_exported = True
         self._alternative_column_name_file_path = alternative_column_name_file_path
+        self._output_batchsize1_if_only_level0 = output_batchsize1_if_only_level0
+        self._use_nan_fill = use_nan_fill
+        self._save_as_text = save_as_text
+        self._embedding_bag_mode = embedding_bag_mode
         self._distributed_tensor = None
         self._combine_schema_source = None
         self._combine_schema = None
@@ -128,6 +140,12 @@ class EmbeddingOperator(torch.nn.Module):
             args.append(f"initializer={self._initializer!r}")
         if self._alternative_column_name_file_path is not None:
             args.append(f"alternative_column_name_file_path={self._alternative_column_name_file_path!r}")
+        if self._output_batchsize1_if_only_level0:
+            args.append(f"output_batchsize1_if_only_level0={self._output_batchsize1_if_only_level0!r}")
+        if self._use_nan_fill:
+            args.append(f"use_nan_fill={self._use_nan_fill!r}")
+        if self._save_as_text:
+            args.append(f"save_as_text={self._save_as_text!r}")
         return f"{self.__class__.__name__}({', '.join(args)})"
 
     @property
@@ -171,6 +189,26 @@ class EmbeddingOperator(torch.nn.Module):
         if self._column_name_file_path is None:
             raise RuntimeError("column_name_file_path is not set")
         return self._column_name_file_path
+
+    @property
+    @torch.jit.unused
+    def is_backing(self):
+        return self._is_backing
+
+    @is_backing.setter
+    @torch.jit.unused
+    def is_backing(self, value):
+        self._is_backing = value
+
+    @property
+    @torch.jit.unused
+    def is_exported(self):
+        return self._is_exported
+
+    @is_exported.setter
+    @torch.jit.unused
+    def is_exported(self, value):
+        self._is_exported = value
 
     @property
     @torch.jit.unused
@@ -293,6 +331,44 @@ class EmbeddingOperator(torch.nn.Module):
         if self._initializer is not None:
             raise RuntimeError(f"can not reset initializer {self._initializer!r} to {value!r}")
         self._initializer = value
+
+    @property
+    @torch.jit.unused
+    def output_batchsize1_if_only_level0(self):
+        return self._output_batchsize1_if_only_level0
+
+    @output_batchsize1_if_only_level0.setter
+    @torch.jit.unused
+    def output_batchsize1_if_only_level0(self, value):
+        self._output_batchsize1_if_only_level0 = value
+
+    @property
+    @torch.jit.unused
+    def use_nan_fill(self):
+        return self._use_nan_fill
+
+    @use_nan_fill.setter
+    @torch.jit.unused
+    def use_nan_fill(self, value):
+        self._use_nan_fill = value
+
+    @property
+    @torch.jit.unused
+    def save_as_text(self):
+        return self._save_as_text
+
+    @save_as_text.setter
+    def save_as_text(self, value):
+        self._save_as_text = value
+
+    @property
+    @torch.jit.unused
+    def embedding_bag_mode(self):
+        return self._embedding_bag_mode
+
+    @embedding_bag_mode.setter
+    def embedding_bag_mode(self, value):
+        self._embedding_bag_mode = value
 
     @property
     @torch.jit.unused
@@ -431,7 +507,7 @@ class EmbeddingOperator(torch.nn.Module):
         indices_1d = torch.from_numpy(indices.view(numpy.int64))
         offsets = self._indices_meta
         offsets_1d = torch.from_numpy(offsets.view(numpy.int64))
-        embs = torch.nn.functional.embedding_bag(indices_1d, self._data, offsets_1d, mode='sum')
+        embs = torch.nn.functional.embedding_bag(indices_1d, self._data, offsets_1d, mode=self.embedding_bag_mode)
         expected_shape = minibatch_size * feature_count, embedding_size
         if embs.shape != expected_shape:
             raise RuntimeError(f"embs has unexpected shape; expect {expected_shape}, found {embs.shape}")
@@ -450,6 +526,18 @@ class EmbeddingOperator(torch.nn.Module):
         return t
 
     @torch.jit.unused
+    def _compute_range_sum(self):
+        self._check_embedding_bag_mode(mode)
+        t = self._compute_embedding_prepare()
+        minibatch_size, embedding_size, indices_1d, offsets_1d = t
+        embs = torch.nn.functional.embedding_bag(indices_1d, self._data, offsets_1d, mode=self.embedding_bag_mode)
+        expected_shape = minibatch_size, embedding_size
+        if embs.shape != expected_shape:
+            raise RuntimeError(f"embs has unexpected shape; expect {expected_shape}, found {embs.shape}")
+        out = embs.reshape(minibatch_size, embedding_size)
+        return out
+
+    @torch.jit.unused
     def _compute_embedding_lookup(self):
         t = self._compute_embedding_prepare()
         minibatch_size, embedding_size, indices_1d, offsets_1d = t
@@ -458,18 +546,6 @@ class EmbeddingOperator(torch.nn.Module):
         if embs.shape != expected_shape:
             raise RuntimeError(f"embs has unexpected shape; expect {expected_shape}, found {embs.shape}")
         out = embs, offsets_1d
-        return out
-
-    @torch.jit.unused
-    def _compute_embedding_bag(self, *, mode='mean'):
-        self._check_embedding_bag_mode(mode)
-        t = self._compute_embedding_prepare()
-        minibatch_size, embedding_size, indices_1d, offsets_1d = t
-        embs = torch.nn.functional.embedding_bag(indices_1d, self._data, offsets_1d, mode=mode)
-        expected_shape = minibatch_size, embedding_size
-        if embs.shape != expected_shape:
-            raise RuntimeError(f"embs has unexpected shape; expect {expected_shape}, found {embs.shape}")
-        out = embs.reshape(minibatch_size, embedding_size)
         return out
 
     @torch.jit.unused
@@ -491,9 +567,13 @@ class EmbeddingOperator(torch.nn.Module):
         await tensor._sparse_tensor_clear()
 
     @torch.jit.unused
-    async def _sparse_tensor_import_from(self, meta_file_path, *, data_only=False, skip_existing=False):
+    async def _sparse_tensor_import_from(self, meta_file_path, *,
+                                         data_only=False, skip_existing=False,
+                                         transform_key=False, feature_name=''):
         tensor = self._distributed_tensor
-        await tensor._sparse_tensor_import_from(meta_file_path, data_only=data_only, skip_existing=skip_existing)
+        await tensor._sparse_tensor_import_from(meta_file_path,
+            data_only=data_only, skip_existing=skip_existing,
+            transform_key=transform_key, feature_name=feature_name)
 
     @torch.jit.unused
     def clear(self):
@@ -507,15 +587,22 @@ class EmbeddingOperator(torch.nn.Module):
         agent.barrier()
 
     @torch.jit.unused
-    def import_from(self, meta_file_path, *, clear_existing=False, data_only=False, skip_existing=False):
+    def import_from(self, meta_file_path, *,
+                    clear_existing=False,
+                    data_only=False, skip_existing=False,
+                    transform_key=False, feature_name=''):
         if self._distributed_tensor is None:
             raise RuntimeError(f"{self!r} is not properly initialized; attribute '_distributed_tensor' is None")
+        if transform_key and not feature_name:
+            raise ValueError("feature_name must be specified to transform key")
         if clear_existing:
             self.clear()
         tensor = self._distributed_tensor
         agent = tensor._handle.agent
         agent.barrier()
-        asyncio.run(self._sparse_tensor_import_from(meta_file_path, data_only=data_only, skip_existing=skip_existing))
+        asyncio.run(self._sparse_tensor_import_from(meta_file_path,
+            data_only=data_only, skip_existing=skip_existing,
+            transform_key=transform_key, feature_name=feature_name))
         agent.barrier()
 
 class EmbeddingSumConcat(EmbeddingOperator):
@@ -539,9 +626,23 @@ class EmbeddingRangeSum(EmbeddingOperator):
 
     @torch.jit.unused
     def _do_compute(self):
-        return self._compute_embedding_bag(mode='sum')
+        return self._compute_range_sum()
 
     @torch.jit.unused
     def _clean(self):
         super()._clean()
         self._output = torch.zeros((2, self.embedding_size))
+
+class EmbeddingLookup(EmbeddingOperator):
+    @torch.jit.unused
+    def _do_combine(self, ndarrays):
+        return self._combine_to_indices_and_offsets(ndarrays, True)
+
+    @torch.jit.unused
+    def _do_compute(self):
+        return self._compute_embedding_lookup()
+
+    @torch.jit.unused
+    def _clean(self):
+        super()._clean()
+        self._output = torch.zeros((2, self.embedding_size)), torch.zeros((1,), dtype=torch.int64)

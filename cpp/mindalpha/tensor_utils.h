@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <pybind11/pybind11.h>
+#include <mindalpha/data_type.h>
 
 namespace mindalpha
 {
@@ -27,5 +29,8 @@ size_t SliceElements(const std::vector<size_t>& shape);
 size_t TotalElements(const std::vector<size_t>& shape);
 std::string ShapeToString(const std::vector<size_t>& shape);
 std::vector<size_t> ShapeFromString(const std::string& str);
+void FillNaN(uint8_t* buffer, size_t size, DataType type);
+void MakeInitializerReady(pybind11::object initializer);
+void MakeUpdaterReady(pybind11::object udpater);
 
 }

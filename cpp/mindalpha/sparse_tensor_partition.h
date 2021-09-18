@@ -35,13 +35,13 @@ public:
     void AllocateHashMap();
     void Clear();
     void HandlePush(SmartArray<uint8_t> keys, SmartArray<uint8_t> in, bool is_value);
-    SmartArray<uint8_t> HandlePull(SmartArray<uint8_t> keys, bool read_only);
+    SmartArray<uint8_t> HandlePull(SmartArray<uint8_t> keys, bool read_only, bool nan_fill);
     void HandlePushPartition(SmartArray<uint8_t> keys, SmartArray<uint8_t> in, bool data_only, bool skip_existing);
     SmartArray<uint8_t> HandlePullPartition(bool data_only, int index, int count, SmartArray<uint8_t>& keys);
     void HandlePushMeta(const SparseTensorMeta& meta);
     const SparseTensorMeta& HandlePullMeta();
     void Load(const std::string& dir_path);
-    void Save(const std::string& dir_path);
+    void Save(const std::string& dir_path, bool text_mode);
     void Export(const std::string& dir_path);
     void PruneSmall(double epsilon);
     void PruneOld(int max_age);
@@ -55,6 +55,8 @@ private:
     std::string GetSparseExportPath(const std::string& dir_path) const;
 
     static constexpr uint64_t kPaddingKey = 0;
+    static constexpr uint64_t kPaddingIndex = uint64_t(-2);
+    static constexpr uint64_t kNotFoundIndex = uint64_t(-1);
     SparseTensorMeta meta_;
     int partition_index_ = -1;
     ArrayHashMap<uint64_t, uint8_t> data_;

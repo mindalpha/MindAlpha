@@ -176,6 +176,7 @@ void DenseTensorMeta::SetInitializerByData(std::string data)
     {
         py::gil_scoped_acquire gil;
         py::object obj = mindalpha::deserialize_pyobject(data);
+        MakeInitializerReady(obj);
         std::shared_ptr<py::object> func = mindalpha::make_shared_pyobject(obj);
         initializer_ = [func](const std::string& name,
                               mindalpha::SmartArray<uint8_t> data,
@@ -206,6 +207,7 @@ void DenseTensorMeta::SetUpdaterByData(std::string data)
     {
         py::gil_scoped_acquire gil;
         py::object obj = mindalpha::deserialize_pyobject(data);
+        MakeUpdaterReady(obj);
         std::shared_ptr<py::object> func = mindalpha::make_shared_pyobject(obj);
         updater_ = [func](const std::string& name,
                           mindalpha::SmartArray<uint8_t> param,

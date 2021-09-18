@@ -77,6 +77,8 @@ add_library(mindalpha_shared SHARED
     cpp/mindalpha/dense_tensor_partition.cpp
     cpp/mindalpha/sparse_tensor_meta.cpp
     cpp/mindalpha/sparse_tensor_partition.cpp
+    cpp/mindalpha/array_hash_map_reader.h
+    cpp/mindalpha/array_hash_map_writer.h
     cpp/mindalpha/tensor_partition_store.cpp
     cpp/mindalpha/dense_tensor.cpp
     cpp/mindalpha/sparse_tensor.cpp

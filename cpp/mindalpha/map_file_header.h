@@ -44,6 +44,7 @@ struct MapFileHeader
     uint64_t value_count_per_key;
 
     void FillBasicFields();
+    bool IsSignatureValid() const;
     void Validate(const std::string& hint) const;
 };
 

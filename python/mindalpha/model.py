@@ -121,6 +121,20 @@ class Model(object):
         if self.training:
             self._module.eval()
 
+    @classmethod
+    def _filter_tensor_list(cls, tensors, name_prefix):
+        return [t for t in tensors if t.name.startswith(name_prefix)]
+
+    def get_submodel(self, submodule, name_prefix):
+        submodel = self.__new__(self.__class__)
+        submodel._agent = self._agent
+        submodel._module = submodule
+        submodel._experiment_name = self._experiment_name
+        submodel._model_version = self._model_version
+        submodel._name_prefix = self._name_prefix
+        submodel._tensors = self._filter_tensor_list(self._tensors, name_prefix)
+        return submodel
+
     def _is_batch_norm(self, name, mod):
         if isinstance(mod, torch.nn.modules.batchnorm._BatchNorm):
             if isinstance(mod, torch.nn.SyncBatchNorm):
@@ -210,15 +224,17 @@ class Model(object):
                 # Pulling dense parameters in prediction mode is redundant.
                 if not self.training and tensor.is_dense:
                     continue
-            future = tensor._pull_tensor()
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._pull_tensor()
+                futures.append(future)
         await asyncio.gather(*futures)
 
     async def _push_tensors(self, *, is_value=False, skip_no_grad=True):
         futures = []
         for tensor in self._tensors:
-            future = tensor._push_tensor(is_value=is_value, skip_no_grad=skip_no_grad)
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._push_tensor(is_value=is_value, skip_no_grad=skip_no_grad)
+                futures.append(future)
         await asyncio.gather(*futures)
 
     async def _clear_tensors(self):
@@ -227,15 +243,17 @@ class Model(object):
     async def _load_tensors(self, dir_path, *, keep_meta=False):
         futures = []
         for tensor in self._tensors:
-            future = tensor._load_tensor(dir_path, keep_meta=keep_meta)
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._load_tensor(dir_path, keep_meta=keep_meta)
+                futures.append(future)
         await asyncio.gather(*futures)
 
     async def _save_tensors(self, dir_path):
         futures = []
         for tensor in self._tensors:
-            future = tensor._save_tensor(dir_path)
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._save_tensor(dir_path)
+                futures.append(future)
         await asyncio.gather(*futures)
 
     def _get_full_class_name(self, obj):
@@ -246,6 +264,7 @@ class Model(object):
     def _get_model_version(self):
         if self._model_version is not None:
             return self._model_version
+        # default to a string in Beijing Time (UTC+8)
         now = time.time()
         now += 8 * 3600
         tm = time.gmtime(now)
@@ -370,6 +389,12 @@ class SparseModel(Model):
         self._embedding_operators = []
         self._cast_operators = []
 
+    def get_submodel(self, submodule, name_prefix):
+        submodel = super().get_submodel(submodule, name_prefix)
+        submodel._embedding_operators = self._filter_tensor_list(self._embedding_operators, name_prefix)
+        submodel._cast_operators = self._filter_tensor_list(self._cast_operators, name_prefix)
+        return submodel
+
     def _collect_embedding_operators(self):
         for name, mod in self.module.named_modules():
             if isinstance(mod, EmbeddingOperator):
@@ -386,8 +411,9 @@ class SparseModel(Model):
     async def _clear_tensors(self):
         futures = []
         for tensor in self._embedding_operators:
-            future = tensor._sparse_tensor_clear()
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._sparse_tensor_clear()
+                futures.append(future)
         await asyncio.gather(*futures)
 
     async def _sparse_tensors_export(self, path, *, model_export_selector=None):
@@ -402,7 +428,7 @@ class SparseModel(Model):
             # Call the ``_clean()`` method so that intermediate results
             # in the EmbeddingOperator won't be serialized.
             tensor.item._clean()
-            if tensor.item in selected:
+            if tensor.item in selected and tensor.is_exported:
                 name = tensor.name
                 if name_prefix is not None:
                     if not name.startswith(name_prefix):
@@ -417,15 +443,17 @@ class SparseModel(Model):
     async def _sparse_tensors_prune_small(self, epsilon):
         futures = []
         for tensor in self._embedding_operators:
-            future = tensor._sparse_tensor_prune_small(epsilon)
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._sparse_tensor_prune_small(epsilon)
+                futures.append(future)
         await asyncio.gather(*futures)
 
     async def _sparse_tensors_prune_old(self, max_age):
         futures = []
         for tensor in self._embedding_operators:
-            future = tensor._sparse_tensor_prune_old(max_age)
-            futures.append(future)
+            if not tensor.is_backing:
+                future = tensor._sparse_tensor_prune_old(max_age)
+                futures.append(future)
         await asyncio.gather(*futures)
 
     def _do_export(self, path, *, model_export_selector=None):
@@ -442,7 +470,7 @@ class SparseModel(Model):
             module = func(module)
         selected = set(module.modules())
         for tensor in self._embedding_operators:
-            if tensor.item in selected:
+            if tensor.item in selected and tensor.is_exported:
                 name = tensor.name
                 if name_prefix is not None:
                     if not name.startswith(name_prefix):
@@ -481,14 +509,16 @@ class SparseModel(Model):
 
     def _execute_combine(self, ndarrays):
         for tensor in self._embedding_operators:
-            tensor.item._combine(ndarrays)
+            if not tensor.is_backing:
+                tensor.item._combine(ndarrays)
 
     def _execute_pull(self):
         asyncio.run(self._pull_tensors())
 
     def _execute_compute(self):
         for tensor in self._embedding_operators:
-            tensor.item._compute()
+            if not tensor.is_backing:
+                tensor.item._compute()
 
     def _execute_cast(self, ndarrays):
         for mod in self._cast_operators:

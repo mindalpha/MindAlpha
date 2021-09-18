@@ -25,13 +25,13 @@ namespace mindalpha
 class ModelMetricBuffer
 {
 public:
-    static void UpdateBuffer(pybind11::array_t<int64_t> positive_buffer,
-                             pybind11::array_t<int64_t> negative_buffer,
+    static void UpdateBuffer(pybind11::array_t<double> positive_buffer,
+                             pybind11::array_t<double> negative_buffer,
                              pybind11::array_t<float> predictions,
-                             pybind11::array_t<int64_t> labels);
+                             pybind11::array_t<float> labels);
 
-    static double ComputeAUC(pybind11::array_t<int64_t> positive_buffer,
-                             pybind11::array_t<int64_t> negative_buffer);
+    static double ComputeAUC(pybind11::array_t<double> positive_buffer,
+                             pybind11::array_t<double> negative_buffer);
 };
 
 }
