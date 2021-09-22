@@ -21,6 +21,7 @@
 #include <sstream>
 #include <vector>
 #include <unordered_map>
+#include <mindalpha/string_utils.h>
 #include <mindalpha/index_batch.h>
 
 namespace mindalpha
@@ -54,11 +55,6 @@ public:
     static uint64_t ComputeFeatureHash(const std::vector<std::pair<std::string, std::string>>& feature);
 
 private:
-    static constexpr uint64_t CombineHashCodes(uint64_t h, uint64_t x)
-    {
-        return h ^ (x + 0x9e3779b9 + (h << 6) + (h >> 2));
-    }
-
     static constexpr uint64_t CombineOneField(uint64_t name, uint64_t value)
     {
         return CombineHashCodes(name, value);

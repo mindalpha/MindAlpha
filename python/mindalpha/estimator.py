@@ -155,7 +155,7 @@ class PyTorchAgent(Agent):
 
     def feed_training_dataset(self):
         df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
-        df.groupBy(df[0]).count().show()
+        df.write.format('noop').mode('overwrite').save()
 
     def feed_validation_dataset(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,
@@ -170,7 +170,7 @@ class PyTorchAgent(Agent):
         # ``validation_result`` when we use it, which is not possible as the
         # PS system has been shutdown.
         df.cache()
-        df.groupBy(df[0]).count().show()
+        df.write.format('noop').mode('overwrite').save()
 
     def feed_training_minibatch(self):
         from pyspark.sql.types import FloatType
@@ -227,7 +227,6 @@ class PyTorchAgent(Agent):
         ndarrays, labels = self.preprocess_minibatch(minibatch)
         predictions = self.model(ndarrays)
         labels = torch.from_numpy(labels).reshape(-1, 1)
-        loss = self.compute_loss(predictions, labels)
         self.update_progress(predictions, labels)
         return predictions.detach().reshape(-1)
 
@@ -419,15 +418,27 @@ class PyTorchHelperMixin(object):
         if self.consul_endpoint_prefix is not None and self.model_export_path is None:
             raise RuntimeError("model_export_path is required when consul_endpoint_prefix is specified")
 
+    def _get_launcher_class(self):
+        return PyTorchLauncher
+
+    def _get_model_class(self):
+        return PyTorchModel
+
+    def _get_agent_class(self):
+        return self.agent_class or PyTorchAgent
+
+    def _get_updater_object(self):
+        return self.updater or AdamTensorUpdater(1e-5)
+
     def _create_launcher(self, dataset, is_training_mode):
         self._check_properties()
-        launcher = PyTorchLauncher()
+        launcher = self._get_launcher_class()()
         launcher.module = self.module
-        launcher.updater = self.updater or AdamTensorUpdater(1e-5)
+        launcher.updater = self._get_updater_object()
         launcher.dataset = dataset
         launcher.worker_count = self.worker_count
         launcher.server_count = self.server_count
-        launcher.agent_class = self.agent_class or PyTorchAgent
+        launcher.agent_class = self._get_agent_class()
         launcher.is_training_mode = is_training_mode
         launcher.model_in_path = self.model_in_path
         launcher.model_out_path = self.model_out_path
@@ -473,7 +484,7 @@ class PyTorchHelperMixin(object):
 
     def _create_model(self, module):
         args = self._get_model_arguments(module)
-        model = PyTorchModel(**args)
+        model = self._get_model_class()(**args)
         return model
 
 class PyTorchModel(PyTorchHelperMixin, pyspark.ml.base.Model):
@@ -527,7 +538,8 @@ class PyTorchEstimator(PyTorchHelperMixin, pyspark.ml.base.Estimator):
             raise RuntimeError("model_out_path of estimator must be specified")
 
     def _clear_output(self):
-        delete_dir(self.model_out_path)
+        if self.model_out_path is not None:
+            delete_dir(self.model_out_path)
         if self.model_export_path is not None:
             delete_dir(self.model_export_path)
 

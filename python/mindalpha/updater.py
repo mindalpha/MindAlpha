@@ -106,6 +106,18 @@ class TensorUpdater(abc.ABC):
             keys = torch.from_numpy(keys.view(numpy.int64))
             self.update_sparse(name=name, param=param, grad=grad, state=state, indices=indices, keys=keys)
 
+# This updater does not update parameters, which can be used as the updater of
+# read-only sparse or dense tensors to avoid allocating optimizer state.
+class NoOpUpdater(TensorUpdater):
+    def __repr__(self):
+        return super().__repr__()
+
+    def update_dense(self, name, param, grad, state):
+        pass
+
+    def update_sparse(self, name, param, grad, state, indices, keys):
+        pass
+
 class SGDTensorUpdater(TensorUpdater):
     def __repr__(self):
         return super().__repr__()

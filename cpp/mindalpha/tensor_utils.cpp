@@ -14,7 +14,12 @@
 // limitations under the License.
 //
 
+#include <limits>
 #include <sstream>
+#include <stdexcept>
+#include <spdlog/spdlog.h>
+#include <mindalpha/stack_trace_utils.h>
+#include <mindalpha/pybind_utils.h>
 #include <mindalpha/tensor_utils.h>
 
 namespace mindalpha
@@ -56,6 +61,58 @@ std::vector<size_t> ShapeFromString(const std::string& str)
     while (sin >> dim)
         shape.push_back(dim);
     return shape;
+}
+
+template<typename T>
+void FillNaNValues(uint8_t* buffer, size_t size)
+{
+    if (size % sizeof(T) != 0)
+    {
+        std::string serr;
+        serr.append("Buffer size ");
+        serr.append(std::to_string(size));
+        serr.append(" is not a multiple of sizeof(");
+        serr.append(DataTypeToString(DataTypeToCode<T>::value));
+        serr.append(".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
+    T* buf = reinterpret_cast<T*>(buffer);
+    const size_t n = size / sizeof(T);
+    for (size_t i = 0; i < n; i++)
+        buf[i] = std::numeric_limits<T>::quiet_NaN();
+}
+
+void FillNaN(uint8_t* buffer, size_t size, DataType type)
+{
+    switch (type)
+    {
+    case DataType::Float32:
+        FillNaNValues<float>(buffer, size);
+        break;
+    case DataType::Float64:
+        FillNaNValues<double>(buffer, size);
+        break;
+    default:
+        std::string serr;
+        serr.append("DataType must be float32 or float64 to fill NaN values; ");
+        serr.append(DataTypeToString(type));
+        serr.append(" is invalid.\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
+}
+
+void MakeInitializerReady(pybind11::object initializer)
+{
+    fixup_attributes(initializer);
+}
+
+void MakeUpdaterReady(pybind11::object updater)
+{
+    fixup_attributes(updater);
 }
 
 }

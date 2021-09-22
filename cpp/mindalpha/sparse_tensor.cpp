@@ -17,6 +17,7 @@
 #include <string.h>
 #include <json11.hpp>
 #include <mindalpha/sparse_tensor.h>
+#include <mindalpha/array_hash_map_reader.h>
 #include <mindalpha/io.h>
 #include <mindalpha/debug.h>
 
@@ -111,7 +112,7 @@ void SparseTensor::Push(SmartArray<uint8_t> keys, SmartArray<uint8_t> in, std::f
     });
 }
 
-void SparseTensor::Pull(SmartArray<uint8_t> keys, std::function<void(SmartArray<uint8_t> out)> cb, bool read_only)
+void SparseTensor::Pull(SmartArray<uint8_t> keys, std::function<void(SmartArray<uint8_t> out)> cb, bool read_only, bool nan_fill)
 {
     const size_t index_count = keys.size() / sizeof(uint64_t);
     const uint64_t* const indices = reinterpret_cast<uint64_t*>(keys.data());
@@ -128,6 +129,7 @@ void SparseTensor::Pull(SmartArray<uint8_t> keys, std::function<void(SmartArray<
         { "command", "SparsePull" },
         { "name", GetMeta().GetName() },
         { "read_only", read_only },
+        { "nan_fill", nan_fill },
     };
     std::string command = json.dump();
     std::vector<PSMessage> reqs;
@@ -186,7 +188,7 @@ void SparseTensor::PushPartition(ArrayHashMap<uint64_t, uint8_t>& data, std::fun
         const size_t part = key % num_parts;
         part_keys.at(part).push_back(key);
         VectorAppend(part_data.at(part), source, vec_length);
-        source += GetMeta().GetSliceTotalBytes();
+        source += vec_length;
     }
     json11::Json json = json11::Json::object
     {
@@ -355,7 +357,7 @@ void SparseTensor::Load(const std::string& dir_path, std::function<void()> cb, b
             // The sparse tensor is repartitioned, all workers need to
             // execute the following logic.
             std::string meta_file_path = GetSparseMetaPath(dir_path);
-            ImportFrom(meta_file_path, cb, false, false);
+            ImportFrom(meta_file_path, cb, false, false, false, "");
         }
     };
     if (!keep_meta)
@@ -373,9 +375,9 @@ void SparseTensor::Load(const std::string& dir_path, std::function<void()> cb, b
     }
 }
 
-void SparseTensor::Save(const std::string& dir_path, std::function<void()> cb)
+void SparseTensor::Save(const std::string& dir_path, std::function<void()> cb, bool text_mode)
 {
-    PullMeta([this, dir_path, cb](SparseTensorMeta meta) {
+    PullMeta([this, dir_path, cb, text_mode](SparseTensorMeta meta) {
         std::string meta_path = GetSparseMetaPath(dir_path);
         std::string str = meta.ToJsonString();
         EnsureLocalDirectory(dir_path);
@@ -386,6 +388,7 @@ void SparseTensor::Save(const std::string& dir_path, std::function<void()> cb)
             { "command", "SparseSave" },
             { "name", GetMeta().GetName() },
             { "dir_path", dir_path },
+            { "text_mode", text_mode },
         };
         req->GetMessageMeta().SetReceiver(ServerGroup);
         req->GetMessageMeta().SetBody(json.dump());
@@ -412,7 +415,8 @@ void SparseTensor::Export(const std::string& dir_path, std::function<void()> cb)
 }
 
 void SparseTensor::ImportFrom(const std::string& meta_file_path, std::function<void()> cb,
-                              bool data_only, bool skip_existing)
+                              bool data_only, bool skip_existing,
+                              bool transform_key, const std::string& feature_name)
 {
     std::string str = StreamReadAll(meta_file_path);
     SparseTensorMeta meta = SparseTensorMeta::FromJsonString(str);
@@ -434,6 +438,8 @@ void SparseTensor::ImportFrom(const std::string& meta_file_path, std::function<v
         std::function<void()> callback;
         bool data_only = false;
         bool skip_existing = false;
+        bool transform_key = false;
+        std::string feature_name;
         SparseTensorMeta meta;
         SparseTensor* sparse_tensor = nullptr;
         std::vector<int> partition_indices;
@@ -446,8 +452,8 @@ void SparseTensor::ImportFrom(const std::string& meta_file_path, std::function<v
                 callback();
                 return;
             }
-            const size_t slice_bytes = meta.GetSliceTotalBytes();
-            ArrayHashMap<uint64_t, uint8_t> map(slice_bytes);
+            const size_t vec_length = data_only ? meta.GetSliceDataLength() : meta.GetSliceTotalBytes();
+            ArrayHashMap<uint64_t, uint8_t> map(vec_length);
             const std::string dir_path = DirName(meta_file_path);
             const int partition_index = partition_indices.at(index++);
             std::string path = GetSparsePath(dir_path, meta, partition_index);
@@ -467,27 +473,47 @@ void SparseTensor::ImportFrom(const std::string& meta_file_path, std::function<v
                 throw std::runtime_error(serr);
             }
             std::unique_ptr<Stream> stream_guard(stream);
-            uint64_t offset = 0;
-            map.Deserialize(path, [stream, &offset](void* ptr, size_t size, const std::string& hint, const std::string& what) {
-                const size_t nread = stream->Read(ptr, size);
-                if (nread != size)
+            ArrayHashMapReader reader(meta, map, stream, data_only, transform_key, feature_name, path);
+            MapFileHeader header;
+            if (reader.DetectBinaryMode(header))
+            {
+                uint64_t offset = sizeof(header);
+                map.DeserializeWithHeader(path, [stream, &offset](void* ptr, size_t size, const std::string& hint, const std::string& what) {
+                    const size_t nread = stream->Read(ptr, size);
+                    if (nread != size)
+                    {
+                        std::string serr;
+                        serr.append(hint);
+                        serr.append("incomplete ");
+                        serr.append(what);
+                        serr.append(", ");
+                        serr.append(std::to_string(size));
+                        serr.append(" bytes expected, but only ");
+                        serr.append(std::to_string(nread));
+                        serr.append(" are read successfully. offset = ");
+                        serr.append(std::to_string(offset));
+                        serr.append("\n\n");
+                        serr.append(GetStackTrace());
+                        spdlog::error(serr);
+                        throw std::runtime_error(serr);
+                    }
+                }, header);
+            }
+            else
+            {
+                if (transform_key && feature_name.empty())
                 {
                     std::string serr;
-                    serr.append(hint);
-                    serr.append("incomplete ");
-                    serr.append(what);
-                    serr.append(", ");
-                    serr.append(std::to_string(size));
-                    serr.append(" bytes expected, but only ");
-                    serr.append(std::to_string(nread));
-                    serr.append(" are read successfully. offset = ");
-                    serr.append(std::to_string(offset));
-                    serr.append("\n\n");
+                    serr.append("Feature name must be specified to transform key; ");
+                    serr.append("can not import sparse tensor partition from \"");
+                    serr.append(meta_file_path);
+                    serr.append("\".\n\n");
                     serr.append(GetStackTrace());
                     spdlog::error(serr);
                     throw std::runtime_error(serr);
                 }
-            });
+                reader.Read();
+            }
             sparse_tensor->PushPartition(map, [self = shared_from_this()] { (*self)(); }, data_only, skip_existing);
         }
     };
@@ -496,6 +522,8 @@ void SparseTensor::ImportFrom(const std::string& meta_file_path, std::function<v
     lambda->callback = cb;
     lambda->data_only = data_only;
     lambda->skip_existing = skip_existing;
+    lambda->transform_key = transform_key;
+    lambda->feature_name = feature_name;
     for (int i = 0; i < meta.GetPartitionCount(); i++)
         if (i % agent_->GetWorkerCount() == agent_->GetAgentRank())
             lambda->partition_indices.push_back(i);

@@ -20,6 +20,8 @@
 #include <mindalpha/tensor_utils.h>
 #include <mindalpha/stack_trace_utils.h>
 #include <mindalpha/sparse_tensor_partition.h>
+#include <mindalpha/array_hash_map_reader.h>
+#include <mindalpha/array_hash_map_writer.h>
 #include <mindalpha/io.h>
 #include <mindalpha/debug.h>
 
@@ -80,7 +82,7 @@ void SparseTensorPartition::HandlePush(SmartArray<uint8_t> keys, SmartArray<uint
     }
 }
 
-SmartArray<uint8_t> SparseTensorPartition::HandlePull(SmartArray<uint8_t> keys, bool read_only)
+SmartArray<uint8_t> SparseTensorPartition::HandlePull(SmartArray<uint8_t> keys, bool read_only, bool nan_fill)
 {
     TransformIndices(keys, true, read_only);
     const size_t index_count = keys.size() / sizeof(uint64_t);
@@ -92,7 +94,9 @@ SmartArray<uint8_t> SparseTensorPartition::HandlePull(SmartArray<uint8_t> keys, 
     {
         const uint64_t index = indices[i];
         const uint8_t* const source = source_blob + GetMeta().GetSliceTotalBytes() * index;
-        if (index == uint64_t(-1))
+        if (index == kNotFoundIndex && nan_fill)
+            FillNaN(target, GetMeta().GetSliceDataLength(), GetMeta().GetDataType());
+        else if (index == kNotFoundIndex || index == kPaddingIndex)
             memset(target, 0, GetMeta().GetSliceDataLength());
         else
             memcpy(target, source, GetMeta().GetSliceDataLength());
@@ -109,7 +113,7 @@ void SparseTensorPartition::TransformIndices(SmartArray<uint8_t> keys, bool pull
     {
         for (size_t i = 0; i < index_count; i++)
             if (indices[i] == kPaddingKey)
-                indices[i] = -1;
+                indices[i] = kPaddingIndex;
             else
                 indices[i] = data_.Find(indices[i]);
     }
@@ -120,7 +124,7 @@ void SparseTensorPartition::TransformIndices(SmartArray<uint8_t> keys, bool pull
         {
             for (size_t i = 0; i < index_count; i++)
                 if (indices[i] == kPaddingKey)
-                    indices[i] = -1;
+                    indices[i] = kPaddingIndex;
                 else
                     indices[i] = data_.FindOrInit(indices[i]);
         }
@@ -245,30 +249,39 @@ void SparseTensorPartition::Load(const std::string& dir_path)
         throw std::runtime_error(serr);
     }
     std::unique_ptr<Stream> stream_guard(stream);
-    uint64_t offset = 0;
-    data_.Deserialize(path, [stream, &offset](void* ptr, size_t size, const std::string& hint, const std::string& what) {
-        const size_t nread = stream->Read(ptr, size);
-        if (nread != size)
-        {
-            std::string serr;
-            serr.append(hint);
-            serr.append("incomplete ");
-            serr.append(what);
-            serr.append(", ");
-            serr.append(std::to_string(size));
-            serr.append(" bytes expected, but only ");
-            serr.append(std::to_string(nread));
-            serr.append(" are read successfully. offset = ");
-            serr.append(std::to_string(offset));
-            serr.append("\n\n");
-            serr.append(GetStackTrace());
-            spdlog::error(serr);
-            throw std::runtime_error(serr);
-        }
-    });
+    ArrayHashMapReader reader(GetMeta(), data_, stream, false, false, "", path);
+    MapFileHeader header;
+    if (reader.DetectBinaryMode(header))
+    {
+        uint64_t offset = sizeof(header);
+        data_.DeserializeWithHeader(path, [stream, &offset](void* ptr, size_t size, const std::string& hint, const std::string& what) {
+            const size_t nread = stream->Read(ptr, size);
+            if (nread != size)
+            {
+                std::string serr;
+                serr.append(hint);
+                serr.append("incomplete ");
+                serr.append(what);
+                serr.append(", ");
+                serr.append(std::to_string(size));
+                serr.append(" bytes expected, but only ");
+                serr.append(std::to_string(nread));
+                serr.append(" are read successfully. offset = ");
+                serr.append(std::to_string(offset));
+                serr.append("\n\n");
+                serr.append(GetStackTrace());
+                spdlog::error(serr);
+                throw std::runtime_error(serr);
+            }
+        }, header);
+    }
+    else
+    {
+        reader.Read();
+    }
 }
 
-void SparseTensorPartition::Save(const std::string& dir_path)
+void SparseTensorPartition::Save(const std::string& dir_path, bool text_mode)
 {
     std::string path = GetSparsePath(dir_path);
     auto stream = Stream::Create(path.c_str(), "w", true);
@@ -287,24 +300,34 @@ void SparseTensorPartition::Save(const std::string& dir_path)
         throw std::runtime_error(serr);
     }
     std::unique_ptr<Stream> stream_guard(stream);
-    const size_t slice_bytes = GetMeta().GetSliceTotalBytes();
-    data_.Serialize(path, [stream](const void* ptr, size_t size) {
-        // ArrayHashMap can be huge (several gigabytes), writing directly
-        // may cause the executor memory to increase substantially, so we
-        // write the data block by block. A better solution would be refining
-        // the implementation of WriteBuffer::Write.
-        const size_t MaxBlockSize = 5 * 1024 * 1024;
-        const char* buffer = static_cast<const char*>(ptr);
-        while (size > 0)
-        {
-            size_t n = MaxBlockSize;
-            if (n > size)
-                n = size;
-            stream->Write(buffer, n);
-            buffer += n;
-            size -= n;
-        }
-    }, slice_bytes);
+    if (text_mode)
+    {
+        ArrayHashMapWriter writer(GetMeta(), data_);
+        writer.Write([stream](const char* ptr, size_t size) {
+            stream->Write(ptr, size);
+        });
+    }
+    else
+    {
+        const size_t slice_bytes = GetMeta().GetSliceTotalBytes();
+        data_.Serialize(path, [stream](const void* ptr, size_t size) {
+            // ArrayHashMap can be huge (several gigabytes), writing directly
+            // may cause the executor memory to increase substantially, so we
+            // write the data block by block. A better solution would be refining
+            // the implementation of WriteBuffer::Write.
+            const size_t MaxBlockSize = 5 * 1024 * 1024;
+            const char* buffer = static_cast<const char*>(ptr);
+            while (size > 0)
+            {
+                size_t n = MaxBlockSize;
+                if (n > size)
+                    n = size;
+                stream->Write(buffer, n);
+                buffer += n;
+                size -= n;
+            }
+        }, slice_bytes);
+    }
 }
 
 void SparseTensorPartition::Export(const std::string& dir_path)

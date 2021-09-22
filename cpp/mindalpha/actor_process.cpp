@@ -110,7 +110,7 @@ void ActorProcess::Receiving()
         try
         {
             const int64_t n = transport_->ReceiveMessage(msg);
-            if (ready_.load() && drop_rate > 0)
+            if (drop_rate > 0 && IsReady())
             {
                 if (rand_r(&seed) % 100 < drop_rate)
                 {
@@ -157,6 +157,44 @@ void ActorProcess::Receiving()
     }
 }
 
+bool ActorProcess::IsReady()
+{
+    std::lock_guard<std::mutex> lock(ready_mutex_);
+    return ready_;
+}
+
+void ActorProcess::SetIsReady(bool value)
+{
+    std::unique_lock<std::mutex> lock(ready_mutex_);
+    ready_ = value;
+    if (value)
+        ready_cv_.notify_one();
+}
+
+void ActorProcess::WaitReady()
+{
+    std::unique_lock<std::mutex> lock(ready_mutex_);
+    int elapsed = 0;
+    const int timeout = 60 * 1000;
+    while (!ready_ && elapsed < timeout)
+    {
+        // Sleep until all peers are connected to each other.
+        ready_cv_.wait_for(lock, std::chrono::milliseconds(100));
+        elapsed += 100;
+    }
+    if (!ready_)
+    {
+        std::string serr;
+        serr.append(config_->GetThisNodeInfo().ToShortString());
+        serr.append(": Fail to connect to others after waiting for ");
+        serr.append(std::to_string(timeout / 1000));
+        serr.append(" seconds.\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        exit(EXIT_FAILURE);
+    }
+}
+
 bool ActorProcess::HandleDataMessage(Message&& msg)
 {
     auto message = std::make_shared<Message>(std::move(msg));
@@ -192,7 +230,7 @@ bool ActorProcess::HandleAddNodeMessage(const Message& msg)
                 num_workers_++;
         }
         spdlog::info("{} has connected to others.", config_->GetThisNodeInfo().ToShortString());
-        ready_ = true;
+        SetIsReady(true);
     }
     return false;
 }
@@ -367,7 +405,7 @@ void ActorProcess::CoordinatorHandleAddNode(const Message& msg)
         spdlog::info("{}: The coordinator has connected to {} servers and {} workers.",
                      config_->GetThisNodeInfo().ToShortString(),
                      num_servers_, num_workers_);
-        ready_ = true;
+        SetIsReady(true);
     }
     else if (!recovery_nodes_.GetNodeControl().GetNodes().empty())
     {
@@ -493,11 +531,7 @@ void ActorProcess::Start()
         msg.GetMessageMeta().SetMessageId(GetMessageId());
         Send(msg);
     }
-    while (!ready_.load())
-    {
-        // Sleep until all peers are connected to each other.
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+    WaitReady();
     {
         std::lock_guard<std::mutex> lock(start_mutex_);
         if (init_stage_ == 1)
@@ -538,7 +572,7 @@ void ActorProcess::Stop()
     agent_->actor_process_ = nullptr;
     agent_.reset();
     init_stage_ = 0;
-    ready_ = false;
+    SetIsReady(false);
     connected_nodes_.clear();
     shared_node_mapping_.clear();
     send_bytes_ = 0;

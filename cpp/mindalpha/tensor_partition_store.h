@@ -45,13 +45,13 @@ public:
     void SparseDispose(const std::string& name);
     void SparseClear(const std::string& name);
     void SparsePush(const std::string& name, PSMessage req, bool is_value);
-    PSMessage SparsePull(const std::string& name, PSMessage req, bool read_only);
+    PSMessage SparsePull(const std::string& name, PSMessage req, bool read_only, bool nan_fill);
     void SparsePushPartition(const std::string& name, PSMessage req, bool data_only, bool skip_existing);
     PSMessage SparsePullPartition(const std::string& name, bool data_only, int index, int count);
     void SparsePushMeta(const std::string& name, const SparseTensorMeta& meta);
     PSMessage SparsePullMeta(const std::string& name);
     void SparseLoad(const std::string& name, const std::string& dir_path);
-    void SparseSave(const std::string& name, const std::string& dir_path);
+    void SparseSave(const std::string& name, const std::string& dir_path, bool text_mode);
     void SparseExport(const std::string& name, const std::string& dir_path);
     void SparsePruneSmall(const std::string& name, double epsilon);
     void SparsePruneOld(const std::string& name, int max_age);

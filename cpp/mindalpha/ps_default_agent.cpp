@@ -195,7 +195,8 @@ void PSDefaultAgent::HandleRequest(PSMessage req)
             {
                 const std::string& name = json["name"].string_value();
                 const bool read_only = json["read_only"].bool_value();
-                PSMessage res = store_->SparsePull(name, req, read_only);
+                const bool nan_fill = json["nan_fill"].bool_value();
+                PSMessage res = store_->SparsePull(name, req, read_only, nan_fill);
                 SendResponse(req, res);
                 break;
             }
@@ -245,7 +246,8 @@ void PSDefaultAgent::HandleRequest(PSMessage req)
             {
                 const std::string& name = json["name"].string_value();
                 const std::string& dir_path = json["dir_path"].string_value();
-                store_->SparseSave(name, dir_path);
+                const bool text_mode = json["text_mode"].bool_value();
+                store_->SparseSave(name, dir_path, text_mode);
                 PSAgent::HandleRequest(req);
                 break;
             }

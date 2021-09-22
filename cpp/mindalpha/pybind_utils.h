@@ -39,6 +39,8 @@ std::shared_ptr<T> extract_shared_pyobject(pybind11::object obj)
 std::string serialize_pyobject(pybind11::object obj);
 pybind11::object deserialize_pyobject(const std::string& data);
 
+void fixup_attributes(pybind11::object obj);
+
 pybind11::array make_numpy_array(SmartArray<uint8_t> data, DataType dtype);
 
 template<typename T>

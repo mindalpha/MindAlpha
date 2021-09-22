@@ -24,7 +24,7 @@ from .estimator import PyTorchAgent
 from .estimator import PyTorchModel
 from .estimator import PyTorchEstimator
 
-class RetrievalModule(torch.nn.Module):
+class TwoTowerRetrievalModule(torch.nn.Module):
     def __init__(self, user_module, item_module, similarity_module):
         super().__init__()
         if not isinstance(user_module, torch.nn.Module):
@@ -83,7 +83,7 @@ class FaissIndexBuildingAgent(PyTorchAgent):
         import pyspark.sql.functions as F
         df = self.dataset.withColumn(self.item_id_column_name, F.monotonically_increasing_id())
         df = df.select(self.feed_validation_minibatch()(*df.columns).alias('validate'))
-        df.groupBy(df[0]).count().show()
+        df.write.format('noop').mode('overwrite').save()
 
     def preprocess_minibatch(self, minibatch):
         ndarrays = [col.values for col in minibatch]
@@ -209,7 +209,7 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         # ``validation_result`` when we use it, which is not possible as the
         # PS system has been shutdown.
         df.cache()
-        df.groupBy(df[0]).count().show()
+        df.write.format('noop').mode('overwrite').save()
 
     def feed_validation_minibatch(self):
         from pyspark.sql.functions import pandas_udf
@@ -241,7 +241,7 @@ class FaissIndexRetrievalAgent(PyTorchAgent):
         index = pd.RangeIndex(minibatch_size)
         return pd.DataFrame(data=data, index=index)
 
-class RetrievalHelperMixin(object):
+class TwoTowerRetrievalHelperMixin(object):
     def __init__(self,
                  item_dataset=None,
                  index_building_agent_class=None,
@@ -293,8 +293,8 @@ class RetrievalHelperMixin(object):
 
     def _check_properties(self):
         super()._check_properties()
-        if not isinstance(self.module, RetrievalModule):
-            raise TypeError(f"module must be RetrievalModule; {self.module!r} is invalid")
+        if not isinstance(self.module, TwoTowerRetrievalModule):
+            raise TypeError(f"module must be TwoTowerRetrievalModule; {self.module!r} is invalid")
         if self.item_dataset is not None and not isinstance(self.item_dataset, pyspark.sql.DataFrame):
             raise TypeError(f"item_dataset must be pyspark.sql.DataFrame; {self.item_dataset!r} is invalid")
         if self.index_building_agent_class is not None and not issubclass(self.index_building_agent_class, FaissIndexBuildingAgent):
@@ -329,6 +329,15 @@ class RetrievalHelperMixin(object):
         if not isinstance(self.retrieval_item_count, int) or self.retrieval_item_count <= 0:
             raise TypeError(f"retrieval_item_count must be positive integer; {self.retrieval_item_count!r} is invalid")
 
+    def _get_model_class(self):
+        return TwoTowerRetrievalModel
+
+    def _get_index_building_agent_class(self):
+        return self.index_building_agent_class or FaissIndexBuildingAgent
+
+    def _get_retrieval_agent_class(self):
+        return self.retrieval_agent_class or FaissIndexRetrievalAgent
+
     def _get_model_arguments(self, module):
         args = super()._get_model_arguments(module)
         args['item_dataset'] = self.item_dataset
@@ -349,18 +358,13 @@ class RetrievalHelperMixin(object):
         args['retrieval_item_count'] = self.retrieval_item_count
         return args
 
-    def _create_model(self, module):
-        args = self._get_model_arguments(module)
-        model = RetrievalModel(**args)
-        return model
-
     def _reload_combine_schemas(self, module):
         for name, mod in module.named_modules():
             if isinstance(mod, EmbeddingOperator):
                 if mod.has_alternative_column_name_file_path:
                     mod.reload_combine_schema(True)
 
-class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
+class TwoTowerRetrievalModel(TwoTowerRetrievalHelperMixin, PyTorchModel):
     def _transform_rec_info(self, rec_info, item_ids_dataset):
         import pyspark.sql.functions as F
         if self.output_user_embeddings:
@@ -408,7 +412,7 @@ class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
         launcher = self._create_launcher(dataset, False)
         launcher.module = self.module.user_module
         launcher.tensor_name_prefix = '_user_module.'
-        launcher.agent_class = self.retrieval_agent_class or FaissIndexRetrievalAgent
+        launcher.agent_class = self._get_retrieval_agent_class()
         launcher.launch()
         df = launcher.agent_object.dataset
         rec_info = launcher.agent_object.validation_result
@@ -451,11 +455,11 @@ class RetrievalModel(RetrievalHelperMixin, PyTorchModel):
                                                     user_embedding_value_delimiter))
         return result
 
-class RetrievalEstimator(RetrievalHelperMixin, PyTorchEstimator):
+class TwoTowerRetrievalEstimator(TwoTowerRetrievalHelperMixin, PyTorchEstimator):
     def _check_properties(self):
         super()._check_properties()
-        if not isinstance(self.item_dataset, pyspark.sql.DataFrame):
-            raise TypeError(f"item_dataset must be pyspark.sql.DataFrame; {self.item_dataset!r} is invalid")
+        if self.model_export_path is not None and self.item_dataset is None:
+            raise RuntimeError("item_dataset must be specified to export model")
         if not isinstance(self.item_ids_column_indices, (list, tuple)) or \
            not all(isinstance(x, int) and x >= 0 for x in self.item_ids_column_indices):
             raise TypeError(f"item_ids_column_indices must be list or tuple of non-negative integers; "
@@ -477,14 +481,15 @@ class RetrievalEstimator(RetrievalHelperMixin, PyTorchEstimator):
         module = launcher.agent_object.module
         self._reload_combine_schemas(module)
         module.eval()
-        launcher2 = self._create_launcher(self.item_dataset, False)
-        launcher2.module = module.item_module
-        launcher2.tensor_name_prefix = '_item_module.'
-        launcher2.agent_class = self.index_building_agent_class or FaissIndexBuildingAgent
-        launcher2.model_in_path = self.model_out_path
-        launcher2.model_out_path = None
-        launcher2.launch()
-        self._copy_faiss_index()
+        if self.item_dataset is not None:
+            launcher2 = self._create_launcher(self.item_dataset, False)
+            launcher2.module = module.item_module
+            launcher2.tensor_name_prefix = '_item_module.'
+            launcher2.agent_class = self._get_index_building_agent_class()
+            launcher2.model_in_path = self.model_out_path
+            launcher2.model_out_path = None
+            launcher2.launch()
+            self._copy_faiss_index()
         model = self._create_model(module)
         self.final_metric = launcher.agent_object._metric
         return model

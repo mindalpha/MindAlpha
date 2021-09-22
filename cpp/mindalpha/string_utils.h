@@ -63,6 +63,11 @@ inline uint64_t BKDRHashWithSeparatePrefixAndEqualPostfix(const char* str, size_
     return seed;
 }
 
+constexpr uint64_t CombineHashCodes(uint64_t h, uint64_t x)
+{
+    return h ^ (x + 0x9e3779b9 + (h << 6) + (h >> 2));
+}
+
 struct StringViewHash
 {
     std::string_view view_;
@@ -128,6 +133,70 @@ inline StringViewHashVector SplitFilterStringViewHash(std::string_view str)
 {
     using namespace std::string_view_literals;
     return SplitFilterStringViewHash(str, " "sv);
+}
+
+inline char FormatHexDigit(int d)
+{
+    if (d >= 10)
+        return 'a' + (d - 10);
+    else
+        return '0' + d;
+}
+
+inline std::string FormatChar(char ch, char delimiter = '\'')
+{
+    switch (ch)
+    {
+        case '\0': return "\\0";
+        case '\a': return "\\a";
+        case '\b': return "\\b";
+        case '\t': return "\\t";
+        case '\n': return "\\n";
+        case '\v': return "\\v";
+        case '\f': return "\\f";
+        case '\r': return "\\r";
+        case '\'': return delimiter == '\'' ? "\\'" : "'";
+        case '"': return delimiter == '"' ? "\\\"" : "\"";
+        case '\\': return "\\\\";
+        default:
+            std::string str;
+            const int c = static_cast<unsigned char>(ch);
+            if (0x20 <= c && c <= 0x7E)
+                str.push_back(ch);
+            else
+            {
+                str.push_back('\\');
+                str.append("u00");
+                str.push_back(FormatHexDigit((c >> 8) & 0xF));
+                str.push_back(FormatHexDigit(c & 0xF));
+            }
+            return str;
+    }
+}
+
+inline std::string ToSource(char ch, char delimiter = '\'')
+{
+    std::string sout;
+    sout.push_back(delimiter);
+    sout.append(FormatChar(ch, delimiter));
+    sout.push_back(delimiter);
+    return sout;
+}
+
+inline std::string ToSource(std::string_view str, char delimiter = '"')
+{
+    std::string sout;
+    sout.push_back(delimiter);
+    for (char ch : str)
+        sout.append(FormatChar(ch, delimiter));
+    sout.push_back(delimiter);
+    return sout;
+}
+
+inline bool EndsWith(std::string_view str, std::string_view sub)
+{
+    const size_t i = str.size() - sub.size();
+    return str.size() >= sub.size() && str.compare(i, sub.size(), sub) == 0;
 }
 
 }

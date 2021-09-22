@@ -20,6 +20,7 @@ from ._mindalpha import PSRunner
 
 from .embedding import EmbeddingSumConcat
 from .embedding import EmbeddingRangeSum
+from .embedding import EmbeddingLookup
 
 from .cast import Cast
 
@@ -31,6 +32,7 @@ from .initializer import NormalTensorInitializer
 from .initializer import XavierTensorInitializer
 
 from .updater import TensorUpdater
+from .updater import NoOpUpdater
 from .updater import SGDTensorUpdater
 from .updater import AdaGradTensorUpdater
 from .updater import AdamTensorUpdater
@@ -62,10 +64,20 @@ else:
     # PySpark may not be available at this point,
     # we import the classes in estimator only when
     # PySpark is ready.
+
     from .estimator import PyTorchAgent
     from .estimator import PyTorchLauncher
     from .estimator import PyTorchModel
     from .estimator import PyTorchEstimator
+
+    from .two_tower_ranking import TwoTowerRankingModule
+    from .two_tower_ranking import TwoTowerRankingAgent
+    from .two_tower_ranking import TwoTowerRankingLauncher
+    from .two_tower_ranking import TwoTowerRankingModel
+    from .two_tower_ranking import TwoTowerRankingEstimator
+
+    from .swing_retrieval import SwingModel
+    from .swing_retrieval import SwingEstimator
 
 try:
     import pyspark
@@ -73,13 +85,11 @@ try:
 except ImportError:
     pass
 else:
-    from .retrieval import RetrievalModule
-    from .retrieval import FaissIndexBuildingAgent
-    from .retrieval import FaissIndexRetrievalAgent
-    from .retrieval import RetrievalModel
-    from .retrieval import RetrievalEstimator
-    from .swing import SwingModel
-    from .swing import SwingEstimator
+    from .two_tower_retrieval import TwoTowerRetrievalModule
+    from .two_tower_retrieval import FaissIndexBuildingAgent
+    from .two_tower_retrieval import FaissIndexRetrievalAgent
+    from .two_tower_retrieval import TwoTowerRetrievalModel
+    from .two_tower_retrieval import TwoTowerRetrievalEstimator
 
 from ._mindalpha import get_mindalpha_version
 __version__ = get_mindalpha_version()

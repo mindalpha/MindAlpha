@@ -45,11 +45,16 @@ set(python_files
     python/mindalpha/ps_launcher.py
     python/mindalpha/job_utils.py
     python/mindalpha/estimator.py
-    python/mindalpha/retrieval.py
-    python/mindalpha/swing.py
+    python/mindalpha/two_tower_ranking.py
+    python/mindalpha/two_tower_retrieval.py
+    python/mindalpha/swing_retrieval.py
     python/mindalpha/experiment.py
     python/mindalpha/spark.py
     python/mindalpha/patching_pickle.py
+    python/mindalpha/compat/__init__.py
+    python/mindalpha/compat/ps/__init__.py
+    python/ps/__init__.py
+    python/ps/job.py
 )
 add_custom_command(OUTPUT ${wheel_file_name}
                    COMMAND env _MINDALPHA_SO=${PROJECT_BINARY_DIR}/_mindalpha.so

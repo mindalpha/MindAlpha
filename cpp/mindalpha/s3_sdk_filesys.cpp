@@ -280,7 +280,7 @@ public:
         }
         else
         {
-            LOG(ERROR) << "CreateMultipartUploadRequest error for file: " << key_ << ", " <<
+            LOG(ERROR) << "CreateMultipartUploadRequest error for file: s3://" << bucket_ << "/" << key_ << ", " <<
                     createUploadOutcome.GetError().GetExceptionName() << " " <<
                     createUploadOutcome.GetError().GetMessage() << std::endl;
             throw std::runtime_error("CreateMultipartUpload error");
@@ -313,7 +313,7 @@ public:
         auto const outcome = client_.PutObject(request);
         if (!outcome.IsSuccess())
         {
-            LOG(ERROR) << "PutObjectRequest error for file: " << key_ << ", " <<
+            LOG(ERROR) << "PutObjectRequest error for file: s3://" << bucket_ << "/" << key_ << ", " <<
                     outcome.GetError().GetExceptionName() << " " <<
                     outcome.GetError().GetMessage() << std::endl;
             throw std::runtime_error("PutObjectRequest error");
@@ -329,7 +329,7 @@ public:
         auto const outcome = client_.UploadPart(request);
         if (!outcome.IsSuccess())
         {
-            LOG(ERROR) << "UploadPart error for file: " << key_ << ", " <<
+            LOG(ERROR) << "UploadPart error for file: s3://" << bucket_ << "/" << key_ << ", " <<
                     outcome.GetError().GetExceptionName() << " " <<
                     outcome.GetError().GetMessage() << std::endl;
             throw std::runtime_error("UploadPart error");
@@ -362,7 +362,7 @@ public:
             auto const complete_outcome = client_.CompleteMultipartUpload(request);
             if (!complete_outcome.IsSuccess())
             {
-                LOG(ERROR) << "CompleteMultipartUpload error for file: "<< key_ << ", " <<
+                LOG(ERROR) << "CompleteMultipartUpload error for file: s3://" << bucket_ << "/" << key_ << ", " <<
                     complete_outcome.GetError().GetExceptionName() << " " <<
                     complete_outcome.GetError().GetMessage() << std::endl;
                 throw std::runtime_error("CompleteMultipartUpload error");
@@ -408,7 +408,7 @@ public:
         path_ = path;
         bucket_ = path.host.c_str();
         key_ = GetValidKey(path.name.c_str(), path.name.size());
-        LOG(INFO) << "Try to open S3 stream: " << bucket_ << ":" << key_ << ", read_only: " << read_only << std::endl;
+        LOG(INFO) << "Try to open S3 stream: s3://" << bucket_ << "/" << key_ << ", read_only: " << read_only << std::endl;
         if (path_.name.back() == '/')
         {
             LOG(ERROR) << "S3 open stream with a directory path: " << path.name << std::endl;
@@ -429,19 +429,19 @@ public:
 
                 if (length < 0)
                 {
-                    LOG(ERROR) << "Open read-only stream for object: " << key_
+                    LOG(ERROR) << "Open read-only stream for object: s3://" << bucket_ << "/" << key_
                         << " but with invalid length: " << length << std::endl;
                     return false;
                 }
 
-                LOG(INFO) << "Opened read-only stream for object: " << key_
+                LOG(INFO) << "Opened read-only stream for object: s3://" << bucket_ << "/" << key_
                     << " with total length: " << length << std::endl;
                 size_ = length;
                 read_buf_.Init(); // init read prefetch buffer
                 return true;
             } else {
-                LOG(ERROR) << "Read object failed with error: " << head_object_outcome.GetError().GetMessage();
-                throw std::runtime_error(std::string("Read object failed with error: ") + head_object_outcome.GetError().GetMessage());
+                LOG(ERROR) << "Read object s3://" << bucket_ << "/" << key_ << " failed with error: " << head_object_outcome.GetError().GetMessage();
+                throw std::runtime_error(std::string("Read object s3://" + bucket_ + "/" + key_ + " failed with error: ") + head_object_outcome.GetError().GetMessage());
             }
         }
         else
@@ -469,14 +469,14 @@ public:
     {
         if (pos_ == size_)
         {
-            LOG(INFO) << "Read S3 object " << key_ << " reached end " << pos_ << std::endl;
+            LOG(INFO) << "Read S3 object s3://" << bucket_ << "/" << key_ << " reached end " << pos_ << std::endl;
             return 0UL;
         }
 
         if (pos_ + size > size_)
         {
             size = size_ - pos_;
-            LOG(INFO) << "Read S3 object " << key_ << " with size " << size <<
+            LOG(INFO) << "Read S3 object s3://" << bucket_ << "/" << key_ << " with size " << size <<
                 " at position " << pos_ <<
                 " larger than total size: " << size_ <<
                 ", change size to " << size << std::endl;
@@ -498,7 +498,7 @@ public:
         }
         else
         {
-            LOG(ERROR) << "GetObject error for file: " << key_ << ", " <<
+            LOG(ERROR) << "GetObject error for file: s3://" << bucket_ << "/" << key_ << ", " <<
                 get_object_outcome.GetError().GetExceptionName() << " " <<
                 get_object_outcome.GetError().GetMessage() << std::endl;
             throw std::runtime_error("GetObject error");

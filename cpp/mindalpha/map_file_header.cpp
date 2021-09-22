@@ -33,9 +33,14 @@ void MapFileHeader::FillBasicFields()
     reserved_ = 0;
 }
 
+bool MapFileHeader::IsSignatureValid() const
+{
+    return memcmp(signature, map_file_signature, map_file_signature_size) == 0;
+}
+
 void MapFileHeader::Validate(const std::string& hint) const
 {
-    if (memcmp(signature, map_file_signature, map_file_signature_size) != 0)
+    if (!IsSignatureValid())
     {
         std::ostringstream serr;
         serr << hint;

@@ -55,6 +55,14 @@ class DistributedTensor(object):
     def is_sparse(self):
         return isinstance(self.item, EmbeddingOperator)
 
+    @property
+    def is_backing(self):
+        return self.is_sparse and self.item.is_backing
+
+    @property
+    def is_exported(self):
+        return self.is_sparse and self.item.is_exported
+
     def _zero_grad(self):
         if self.is_dense_parameter or self.is_sparse:
             if self.item.grad is not None:
@@ -144,6 +152,7 @@ class DistributedTensor(object):
         if keys is None:
             return
         read_only = not op.training or not op.requires_grad
+        nan_fill = read_only and op.use_nan_fill
         def pull_sparse_tensor():
             loop = asyncio.get_running_loop()
             future = loop.create_future()
@@ -151,7 +160,7 @@ class DistributedTensor(object):
                 op._check_dtype_and_shape(keys, data)
                 op._update_data(data)
                 loop.call_soon_threadsafe(future.set_result, None)
-            self._handle.pull(keys, pull_sparse_tensor_done, read_only)
+            self._handle.pull(keys, pull_sparse_tensor_done, read_only, nan_fill)
             return future
         await pull_sparse_tensor()
 
@@ -215,7 +224,11 @@ class DistributedTensor(object):
         def save_tensor_done():
             loop.call_soon_threadsafe(future.set_result, None)
         dir_path = use_s3(dir_path)
-        self._handle.save(dir_path, save_tensor_done)
+        if self.is_sparse:
+            text_mode = self.item.save_as_text
+            self._handle.save(dir_path, save_tensor_done, text_mode)
+        else:
+            self._handle.save(dir_path, save_tensor_done)
         return future
 
     def _sparse_tensor_clear(self):
@@ -235,13 +248,17 @@ class DistributedTensor(object):
         self._handle.export(dir_path, sparse_tensor_export_done)
         return future
 
-    def _sparse_tensor_import_from(self, meta_file_path, *, data_only=False, skip_existing=False):
+    def _sparse_tensor_import_from(self, meta_file_path, *,
+                                   data_only=False, skip_existing=False,
+                                   transform_key=False, feature_name=''):
         loop = asyncio.get_running_loop()
         future = loop.create_future()
         def sparse_tensor_import_from_done():
             loop.call_soon_threadsafe(future.set_result, None)
         meta_file_path = use_s3(meta_file_path)
-        self._handle.import_from(meta_file_path, sparse_tensor_import_from_done, data_only, skip_existing)
+        self._handle.import_from(meta_file_path, sparse_tensor_import_from_done,
+                                 data_only, skip_existing,
+                                 transform_key, feature_name)
         return future
 
     def _sparse_tensor_prune_small(self, epsilon):

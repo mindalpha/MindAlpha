@@ -246,7 +246,7 @@ void TensorPartitionStore::SparsePush(const std::string& name, PSMessage req, bo
     part.HandlePush(keys, in, is_value);
 }
 
-PSMessage TensorPartitionStore::SparsePull(const std::string& name, PSMessage req, bool read_only)
+PSMessage TensorPartitionStore::SparsePull(const std::string& name, PSMessage req, bool read_only, bool nan_fill)
 {
     auto it = sparse_store_.find(name);
     if (it == sparse_store_.end())
@@ -261,7 +261,7 @@ PSMessage TensorPartitionStore::SparsePull(const std::string& name, PSMessage re
     }
     SparseTensorPartition& part = it->second;
     SmartArray<uint8_t> keys = req->GetTypedSlice<uint64_t>(0).Cast<uint8_t>();
-    SmartArray<uint8_t> out = part.HandlePull(keys, read_only);
+    SmartArray<uint8_t> out = part.HandlePull(keys, read_only, nan_fill);
     PSMessage res = std::make_shared<Message>();
     res->AddTypedSlice(out, part.GetMeta().GetDataType());
     return res;
@@ -362,7 +362,7 @@ void TensorPartitionStore::SparseLoad(const std::string& name, const std::string
     part.Load(dir_path);
 }
 
-void TensorPartitionStore::SparseSave(const std::string& name, const std::string& dir_path)
+void TensorPartitionStore::SparseSave(const std::string& name, const std::string& dir_path, bool text_mode)
 {
     auto it = sparse_store_.find(name);
     if (it == sparse_store_.end())
@@ -377,7 +377,7 @@ void TensorPartitionStore::SparseSave(const std::string& name, const std::string
     }
     SparseTensorPartition& part = it->second;
     EnsureLocalDirectory(dir_path);
-    part.Save(dir_path);
+    part.Save(dir_path, text_mode);
 }
 
 void TensorPartitionStore::SparseExport(const std::string& name, const std::string& dir_path)

@@ -54,6 +54,12 @@ pybind11::object deserialize_pyobject(const std::string& data)
     return obj;
 }
 
+void fixup_attributes(pybind11::object obj)
+{
+    pybind11::module compat = pybind11::module::import("mindalpha.compat");
+    compat.attr("fixup_attributes")(obj);
+}
+
 pybind11::array make_numpy_array(SmartArray<uint8_t> data, DataType dtype)
 {
     namespace py = pybind11;
