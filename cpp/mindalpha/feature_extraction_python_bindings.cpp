@@ -16,7 +16,9 @@
 
 #include <memory>
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 #include <mindalpha/pybind_utils.h>
+#include <mindalpha/stack_trace_utils.h>
 #include <mindalpha/combine_schema.h>
 #include <mindalpha/index_batch.h>
 #include <mindalpha/hash_uniquifier.h>
@@ -64,7 +66,13 @@ py::class_<mindalpha::CombineSchema, std::shared_ptr<mindalpha::CombineSchema>>(
                 std::string name = t[0].cast<std::string>();
                 std::string value = t[1].cast<std::string>();
                 if (value == "none")
-                    throw std::runtime_error("none as value is invalid, because it should have been filtered");
+                {
+                    std::string serr;
+                    serr.append("none as value is invalid, because it should have been filtered\n\n");
+                    serr.append(GetStackTrace());
+                    spdlog::error(serr);
+                    throw std::runtime_error(serr);
+                }
                 vec.emplace_back(std::move(name), std::move(value));
             }
             return mindalpha::CombineSchema::ComputeFeatureHash(vec);
@@ -79,7 +87,13 @@ py::class_<mindalpha::CombineSchema, std::shared_ptr<mindalpha::CombineSchema>>(
         [](py::tuple t)
         {
             if (t.size() != 2)
-                throw std::runtime_error("invalid pickle state");
+            {
+                std::string serr;
+                serr.append("invalid pickle state\n\n");
+                serr.append(GetStackTrace());
+                spdlog::error(serr);
+                throw std::runtime_error(serr);
+            }
             std::string str1 = t[0].cast<std::string>();
             std::string str2 = t[1].cast<std::string>();
             auto schema = std::make_shared<mindalpha::CombineSchema>();

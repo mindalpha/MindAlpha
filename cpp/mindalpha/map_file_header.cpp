@@ -15,8 +15,9 @@
 //
 
 #include <string.h>
-#include <sstream>
 #include <stdexcept>
+#include <spdlog/spdlog.h>
+#include <mindalpha/stack_trace_utils.h>
 #include <mindalpha/hashtable_helpers.h>
 #include <mindalpha/map_file_header.h>
 
@@ -42,63 +43,77 @@ void MapFileHeader::Validate(const std::string& hint) const
 {
     if (!IsSignatureValid())
     {
-        std::ostringstream serr;
-        serr << hint;
-        serr << "file signature not match.";
-        throw std::runtime_error(serr.str());
+        std::string serr;
+        serr.append(hint);
+        serr.append("file signature not match.\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (version != map_file_version)
     {
-        std::ostringstream serr;
-        serr << hint;
-        serr << "file version not match, expect " << map_file_version << ", ";
-        serr << "found " << version << ".";
-        throw std::runtime_error(serr.str());
+        std::string serr;
+        serr.append(hint);
+        serr.append("file version not match, expect " + std::to_string(map_file_version) + ", ");
+        serr.append("found " + std::to_string(version) + ".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (static_cast<int64_t>(value_count_per_key) < 0)
     {
-        std::ostringstream serr;
-        serr << hint;
-        serr << "value_count_per_key must be non-negative ";
-        serr << static_cast<int64_t>(value_count_per_key) << ".";
-        throw std::runtime_error(serr.str());
+        std::string serr;
+        serr.append(hint);
+        serr.append("value_count_per_key must be non-negative ");
+        serr.append(std::to_string(static_cast<int64_t>(value_count_per_key)) + ".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (key_count * value_count_per_key != value_count)
     {
-        std::ostringstream serr;
-        serr << hint;
-        serr << "value_count is incorrect. ";
-        serr << "key_count = " << key_count << ", ";
-        serr << "value_count = " << value_count << ", ";
-        serr << "value_count_per_key = " << value_count_per_key << ".";
-        throw std::runtime_error(serr.str());
+        std::string serr;
+        serr.append(hint);
+        serr.append("value_count is incorrect. ");
+        serr.append("key_count = " + std::to_string(key_count) + ", ");
+        serr.append("value_count = " + std::to_string(value_count) + ", ");
+        serr.append("value_count_per_key = " + std::to_string(value_count_per_key) + ".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (reserved_ != 0)
     {
-        std::ostringstream serr;
-        serr << hint;
-        serr << "reserved_ field not zero. ";
-        serr << "reserved_ = " << reserved_ << ".";
-        throw std::runtime_error(serr.str());
+        std::string serr;
+        serr.append(hint);
+        serr.append("reserved_ field not zero. ");
+        serr.append("reserved_ = " + std::to_string(reserved_) + ".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (key_count > bucket_count)
     {
-        std::ostringstream serr;
-        serr << hint;
-        serr << "key_count exceeds bucket_count. ";
-        serr << "key_count = " << key_count << ", ";
-        serr << "bucket_count = " << bucket_count << ".";
-        throw std::runtime_error(serr.str());
+        std::string serr;
+        serr.append(hint);
+        serr.append("key_count exceeds bucket_count. ");
+        serr.append("key_count = " + std::to_string(key_count) + ", ");
+        serr.append("bucket_count = " + std::to_string(bucket_count) + ".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (bucket_count > 0)
     {
         if (HashtableHelpers::GetPowerBucketCount(bucket_count) != bucket_count)
         {
-            std::ostringstream serr;
-            serr << hint;
-            serr << "bucket_count " << bucket_count << " is invalid; ";
-            serr << "it must be a power of 2.";
-            throw std::runtime_error(serr.str());
+            std::string serr;
+            serr.append(hint);
+            serr.append("bucket_count " + std::to_string(bucket_count) + " is invalid; ");
+            serr.append("it must be a power of 2.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
         }
     }
 }

@@ -15,7 +15,9 @@
 //
 
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 #include <mindalpha/pybind_utils.h>
+#include <mindalpha/stack_trace_utils.h>
 
 namespace mindalpha
 {
@@ -101,7 +103,13 @@ std::tuple<std::string_view, pybind11::object> get_string_object_tuple(pybind11:
     else if (pybind11::isinstance<pybind11::str>(obj))
         return make_string_object_tuple(obj.attr("encode")("utf-8").cast<pybind11::bytes>());
     else
-        throw std::runtime_error("None, bytes or str expected");
+    {
+        std::string serr;
+        serr.append("None, bytes or str expected\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
 }
 
 }

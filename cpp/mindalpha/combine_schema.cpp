@@ -14,7 +14,9 @@
 // limitations under the License.
 //
 
+#include <spdlog/spdlog.h>
 #include <mindalpha/io.h>
+#include <mindalpha/stack_trace_utils.h>
 #include <mindalpha/combine_schema.h>
 
 namespace mindalpha
@@ -185,7 +187,16 @@ CombineSchema::CombineToIndicesAndOffsets(const IndexBatch& batch, bool feature_
 const StringViewHashVector*
 CombineSchema::GetCell(const IndexBatch& batch, size_t i, const std::string& column_name) const
 {
-    const size_t column_index = column_name_map_.at(column_name);
+    auto it = column_name_map_.find(column_name);
+    if (it == column_name_map_.end())
+    {
+        std::string serr;
+        serr.append("undefined column name \"" + column_name + "\".\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
+    const size_t column_index = it->second;
     const StringViewHashVector& vec = batch.GetCell(i, column_index, column_name);
     return vec.empty() ? nullptr : &vec;
 }
@@ -198,14 +209,16 @@ void CombineSchema::CombineOneFeature(const std::vector<const StringViewHashVect
 {
     if (splits.size() != names.size())
     {
-        std::ostringstream sout;
-        sout << "number of splits and names mismatch; ";
-        sout << splits.size() << " != " << names.size() << ". ";
-        sout << "names = [";
+        std::string serr;
+        serr.append("number of splits and names mismatch; ");
+        serr.append(std::to_string(splits.size()) + " != " + std::to_string(names.size()) + ". ");
+        serr.append("names = [");
         for (size_t i = 0; i < names.size(); i++)
-            sout << (i ? ", " : "") << names.at(i);
-        sout << "]";
-        throw std::runtime_error(sout.str());
+            serr.append((i ? ", " : "") + names.at(i));
+        serr.append("]\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
     }
     if (total_results == 1)
     {
@@ -282,13 +295,25 @@ void CombineSchema::CombineOneFeature(const std::vector<const StringViewHashVect
 uint64_t CombineSchema::ComputeFeatureHash(const std::vector<std::pair<std::string, std::string>>& feature)
 {
     if (feature.empty())
-        throw std::runtime_error("feature can not be empty");
+    {
+        std::string serr;
+        serr.append("feature can not be empty\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
     uint64_t h = 0;
     for (size_t i = 0; i < feature.size(); i++)
     {
         const std::pair<std::string, std::string>& p = feature.at(i);
         if (p.second == "none")
-            throw std::runtime_error("none as value is invalid, because it should have been filtered");
+        {
+            std::string serr;
+            serr.append("none as value is invalid, because it should have been filtered\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         const uint64_t name = BKDRHashWithEqualPostfix(p.first);
         const uint64_t value = BKDRHash(p.second);
         if (i == 0)

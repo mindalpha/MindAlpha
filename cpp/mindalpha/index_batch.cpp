@@ -15,7 +15,9 @@
 //
 
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 #include <mindalpha/index_batch.h>
+#include <mindalpha/stack_trace_utils.h>
 
 namespace mindalpha
 {
@@ -23,27 +25,58 @@ namespace mindalpha
 IndexBatch::IndexBatch(pybind11::list columns, const std::string& delimiters)
 {
     if (columns.empty())
-        throw std::runtime_error("empty columns list");
+    {
+        std::string serr;
+        serr.append("empty columns list\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
     split_columns_.reserve(columns.size());
     size_t rows = 0;
     for (size_t j = 0; j < columns.size(); j++)
     {
         pybind11::object item = columns[j];
         if (!pybind11::isinstance<pybind11::array>(item))
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray");
+        {
+            std::string serr;
+            serr.append("column " + std::to_string(j) + " is not numpy ndarray\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         pybind11::array arr = item.cast<pybind11::array>();
         if (arr.dtype().kind() != 'O')
-            throw std::runtime_error("column " + std::to_string(j) + " is not numpy ndarray of object");
+        {
+            std::string serr;
+            serr.append("column " + std::to_string(j) + " is not numpy ndarray of object\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         StringViewColumn column = SplitColumn(arr, delimiters);
         if (j == 0)
             rows = column.size();
         else if (column.size() != rows)
-            throw std::runtime_error("column " + std::to_string(j) + " and column 0 are not of the same length; " +
-                                     std::to_string(column.size()) + " != " + std::to_string(rows));
+        {
+            std::string serr;
+            serr.append("column " + std::to_string(j) + " and column 0 are not of the same length; ");
+            serr.append(std::to_string(column.size()) + " != " + std::to_string(rows));
+            serr.append("\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         split_columns_.push_back(std::move(column));
     }
     if (rows == 0)
-        throw std::runtime_error("number of rows is zero");
+    {
+        std::string serr;
+        serr.append("number of rows is zero\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
     rows_ = rows;
 }
 
@@ -69,10 +102,25 @@ IndexBatch::SplitColumn(const pybind11::array& column, std::string_view delims)
 const StringViewHashVector& IndexBatch::GetCell(size_t i, size_t j, const std::string& column_name) const
 {
     if (i >= rows_)
-        throw std::runtime_error("row index i is out of range; " + std::to_string(i) + " >= " + std::to_string(rows_));
+    {
+        std::string serr;
+        serr.append("row index i is out of range; ");
+        serr.append(std::to_string(i) + " >= " + std::to_string(rows_));
+        serr.append("\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
     if (j >= split_columns_.size())
-        throw std::runtime_error("column index j (" + column_name + ") is out of range; " + std::to_string(j) +
-                                 " >= " + std::to_string(split_columns_.size()));
+    {
+        std::string serr;
+        serr.append("column index j (" + column_name + ") is out of range; ");
+        serr.append(std::to_string(j) + " >= " + std::to_string(split_columns_.size()));
+        serr.append("\n\n");
+        serr.append(GetStackTrace());
+        spdlog::error(serr);
+        throw std::runtime_error(serr);
+    }
     auto& column = split_columns_.at(j);
     return column.at(i).items_;
 }
