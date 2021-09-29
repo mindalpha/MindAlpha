@@ -30,7 +30,6 @@ set(python_files
     python/mindalpha/agent.py
     python/mindalpha/metric.py
     python/mindalpha/loss_utils.py
-    python/mindalpha/nn.py
     python/mindalpha/embedding.py
     python/mindalpha/cast.py
     python/mindalpha/input.py
@@ -51,6 +50,11 @@ set(python_files
     python/mindalpha/experiment.py
     python/mindalpha/spark.py
     python/mindalpha/patching_pickle.py
+    python/mindalpha/nn/__init__.py
+    python/mindalpha/nn/normalization.py
+    python/mindalpha/nn/fm.py
+    python/mindalpha/nn/wide_and_deep.py
+    python/mindalpha/nn/deep_fm.py
     python/mindalpha/compat/__init__.py
     python/mindalpha/compat/ps/__init__.py
     python/ps/__init__.py

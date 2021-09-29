@@ -27,6 +27,7 @@
 #include <utility>
 #include <spdlog/spdlog.h>
 #include <mindalpha/hashtable_helpers.h>
+#include <mindalpha/stack_trace_utils.h>
 #include <mindalpha/memory_buffer.h>
 #include <mindalpha/map_file_header.h>
 
@@ -53,7 +54,13 @@ public:
         : ArrayHashMap()
     {
         if (value_count_per_key < 0)
-            throw std::runtime_error("value_count_per_key must be non-negative.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key must be non-negative.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         value_count_per_key_ = static_cast<uint64_t>(value_count_per_key);
     }
 
@@ -115,7 +122,13 @@ public:
     void Reserve(uint64_t size)
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         if (bucket_count_ >= size)
             return;
         Reallocate(size);
@@ -124,7 +137,13 @@ public:
     void Reallocate(uint64_t size)
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         if (key_count_ > size)
             return;
         if (size == 0)
@@ -136,11 +155,13 @@ public:
         const uint64_t limit = std::numeric_limits<uint32_t>::max();
         if (bucket_count > limit)
         {
-            std::ostringstream serr;
-            serr << "store " << size << " keys ";
-            serr << "requires " << bucket_count << " buckets, ";
-            serr << "but at most " << limit << " are allowed.";
-            throw std::runtime_error(serr.str());
+            std::string serr;
+            serr.append("store " + std::to_string(size) + " keys ");
+            serr.append("requires " + std::to_string(bucket_count) + " buckets, ");
+            serr.append("but at most " + std::to_string(limit) + " are allowed.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
         }
         keys_buffer_.Reallocate(bucket_count * sizeof(TKey));
         values_buffer_.Reallocate(bucket_count * value_count_per_key_ * sizeof(TValue));
@@ -183,7 +204,13 @@ public:
         if (bucket_count_ == 0)
             return nullptr;
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         const uint32_t nil = uint32_t(-1);
         const uint64_t bucket = get_bucket(key);
         uint32_t i = first_[bucket];
@@ -199,7 +226,13 @@ public:
     TValue* GetOrInit(TKey key, bool& is_new, int64_t& index)
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         const uint32_t nil = uint32_t(-1);
         if (bucket_count_ > 0)
         {
@@ -267,7 +300,13 @@ public:
     void Prune(Func pred)
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         uint64_t v = 0;
         for (uint64_t i = 0; i < key_count_; i++)
         {
@@ -294,7 +333,13 @@ public:
     void Dump(std::ostream& out = std::cerr, uint64_t count_limit = uint64_t(-1)) const
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         for (uint64_t i = 0; i < key_count_; i++)
         {
             if (i >= count_limit)
@@ -379,7 +424,13 @@ public:
     void Each(Func action)
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         for (uint64_t i = 0; i < key_count_; i++)
         {
             const TKey key = keys_[i];
@@ -392,11 +443,23 @@ public:
     void Serialize(const std::string& path, Func write, uint64_t value_count_per_key = static_cast<uint64_t>(-1))
     {
         if (value_count_per_key_ == static_cast<uint64_t>(-1))
-            throw std::runtime_error("value_count_per_key is not set.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key is not set.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         if (value_count_per_key == static_cast<uint64_t>(-1))
             value_count_per_key = value_count_per_key_;
         if (value_count_per_key > value_count_per_key_)
-            throw std::runtime_error("value_count_per_key exceeds that in the map.");
+        {
+            std::string serr;
+            serr.append("value_count_per_key exceeds that in the map.\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
+        }
         std::string hint;
         hint.append("Fail to serialize ArrayHashMap to \"");
         hint.append(path);
@@ -455,11 +518,13 @@ public:
             const size_t key_size_2 = DataTypeToSize(key_type_2);
             if (key_size_1 != key_size_2)
             {
-                std::ostringstream serr;
-                serr << "key types mismatch; ";
-                serr << "expect '" << DataTypeToString(DataTypeToCode<TKey>::value) << "', ";
-                serr << "found '" << DataTypeToString(static_cast<DataType>(header.key_type)) << "'.";
-                throw std::runtime_error(serr.str());
+                std::string serr;
+                serr.append("key types mismatch; ");
+                serr.append("expect '" + DataTypeToString(DataTypeToCode<TKey>::value) + "', ");
+                serr.append("found '" + DataTypeToString(static_cast<DataType>(header.key_type)) + "'.\n\n");
+                serr.append(GetStackTrace());
+                spdlog::error(serr);
+                throw std::runtime_error(serr);
             }
         }
         if (header.value_type != static_cast<uint64_t>(DataTypeToCode<TValue>::value))
@@ -477,12 +542,14 @@ public:
                 }
                 else
                 {
-                    std::ostringstream serr;
-                    serr << "value types mismatch; ";
-                    serr << "expect '" << DataTypeToString(DataTypeToCode<TValue>::value) << "', ";
-                    serr << "found '" << DataTypeToString(static_cast<DataType>(header.value_type)) << "'. ";
-                    serr << "value_count_per_key = " << value_count_per_key;
-                    throw std::runtime_error(serr.str());
+                    std::string serr;
+                    serr.append("value types mismatch; ");
+                    serr.append("expect '" + DataTypeToString(DataTypeToCode<TValue>::value) + "', ");
+                    serr.append("found '" + DataTypeToString(static_cast<DataType>(header.value_type)) + "'. ");
+                    serr.append("value_count_per_key = " + std::to_string(value_count_per_key) + "\n\n");
+                    serr.append(GetStackTrace());
+                    spdlog::error(serr);
+                    throw std::runtime_error(serr);
                 }
             }
         }
@@ -503,10 +570,13 @@ public:
         FILE* fout = fopen(path.c_str(), "wb");
         if (fout == NULL)
         {
-            std::ostringstream serr;
-            serr << "can not open file \"" << path << "\" for map serializing; ";
-            serr << strerror(errno);
-            throw std::runtime_error(serr.str());
+            std::string serr;
+            serr.append("can not open file \"" + path + "\" for map serializing; ");
+            serr.append(strerror(errno));
+            serr.append("\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
         }
         std::unique_ptr<FILE, decltype(&fclose)> fout_guard(fout, &fclose);
         Serialize(path, [fout](const void* ptr, size_t size) { fwrite(ptr, 1, size, fout); }, value_count_per_key);
@@ -521,11 +591,14 @@ public:
         FILE* fin = fopen(path.c_str(), "rb");
         if (fin == NULL)
         {
-            std::ostringstream serr;
-            serr << hint;
-            serr << "can not open file. ";
-            serr << strerror(errno);
-            throw std::runtime_error(serr.str());
+            std::string serr;
+            serr.append(hint);
+            serr.append("can not open file. ");
+            serr.append(strerror(errno));
+            serr.append("\n\n");
+            serr.append(GetStackTrace());
+            spdlog::error(serr);
+            throw std::runtime_error(serr);
         }
         uint64_t offset = 0;
         std::unique_ptr<FILE, decltype(&fclose)> fin_guard(fin, &fclose);
@@ -533,13 +606,15 @@ public:
             const size_t nread = fread(ptr, 1, size, fin);
             if (nread != size)
             {
-                std::ostringstream serr;
-                serr << hint;
-                serr << "incomplete " << what << ", ";
-                serr << size << " bytes expected, ";
-                serr << "but only " << nread << " are read successfully. ";
-                serr << "offset = " << offset << " (0x" << std::hex << offset << ")";
-                throw std::runtime_error(serr.str());
+                std::string serr;
+                serr.append(hint);
+                serr.append("incomplete " + what + ", ");
+                serr.append(std::to_string(size) + " bytes expected, ");
+                serr.append("but only " + std::to_string(nread) + " are read successfully. ");
+                serr.append("offset = " + std::to_string(offset) + "\n\n");
+                serr.append(GetStackTrace());
+                spdlog::error(serr);
+                throw std::runtime_error(serr);
             }
             offset += nread;
         });

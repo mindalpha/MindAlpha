@@ -65,7 +65,7 @@ def get_mindalpha_version():
 setup(name='mindalpha',
       version=get_mindalpha_version(),
       description="MindAlpha machine learning platform.",
-      packages=['mindalpha', 'mindalpha.compat', 'mindalpha.compat.ps', 'ps'],
+      packages=['mindalpha', 'mindalpha.nn', 'mindalpha.compat', 'mindalpha.compat.ps', 'ps'],
       ext_modules=[MindAlphaExtension('mindalpha/_mindalpha')],
       cmdclass={ 'build_ext': mindalpha_build_ext },
       install_requires=['numpy>=1.20.1',
