@@ -17,7 +17,14 @@
 #
 
 set -e
-pushd $(dirname ${BASH_SOURCE[0]})
-tag=$(source /etc/os-release; echo ${ID}${VERSION_ID})
-./docker/${tag}/compile.sh
+pushd $(dirname ${BASH_SOURCE[0]})/../..
+rm -rf build/python-env
+rm -rf build/python-env.tgz
+mkdir -p build/python-env
+tar -xf /usr/local/python-env-3.8.5.tgz -C build/python-env
+build/python-env/bin/python3.8 -m pip install --upgrade build/mindalpha-2.0.0+*-cp38-cp38-linux_x86_64.whl pip
+find build/python-env/bin -type f -exec sed -i -e 's@^#!.\+/bin/python\(3\(\.8\)\?\)\?$@#!/usr/bin/env python3.8@' {} \;
+tar -czf build/python-env.tgz -C build/python-env $(ls build/python-env)
+rm -rf build/python-env
 popd
+echo OK

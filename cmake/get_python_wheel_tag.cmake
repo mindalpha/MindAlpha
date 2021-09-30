@@ -21,7 +21,8 @@ function(get_python_wheel_tag var)
     string(APPEND src "(sys.version_info.major, sys.version_info.minor); ")
     string(APPEND src "flag = 'u' if ver == '27' and ")
     string(APPEND src "sys.maxunicode == 0x10ffff else ''; ")
-    string(APPEND src "print('cp%s-cp%sm%s-linux_x86_64' % ")
+    string(APPEND src "flag += 'm' if ver == '37' else ''; ")
+    string(APPEND src "print('cp%s-cp%s%s-linux_x86_64' % ")
     string(APPEND src "(ver, ver, flag))")
     execute_process(
         COMMAND ${Python_EXECUTABLE} -c "${src}"

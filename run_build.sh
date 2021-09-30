@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 function build_images() {
     local name=$1
-    docker build --no-cache -f docker/Dockerfile -t $name .
-    #docker build  -f docker/Dockerfile -t $name .
+    docker build --no-cache -f docker/ubuntu20.04/Dockerfile -t $name .
+    #docker build  -f docker/ubuntu20.04/Dockerfile -t $name .
 }
 function build_mindalpha() {
     local image_name=$1

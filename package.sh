@@ -19,5 +19,5 @@
 set -e
 pushd $(dirname ${BASH_SOURCE[0]})
 tag=$(source /etc/os-release; echo ${ID}${VERSION_ID})
-./docker/${tag}/compile.sh
+./docker/${tag}/package.sh
 popd

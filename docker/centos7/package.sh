@@ -17,7 +17,14 @@
 #
 
 set -e
-pushd $(dirname ${BASH_SOURCE[0]})
-tag=$(source /etc/os-release; echo ${ID}${VERSION_ID})
-./docker/${tag}/compile.sh
+pushd $(dirname ${BASH_SOURCE[0]})/../..
+rm -rf build/python-env
+rm -rf build/python-env.tgz
+mkdir -p build/python-env
+tar -xf /usr/local/python-env-3.7.7.tgz -C build/python-env
+build/python-env/bin/python3.7 -m pip install --upgrade build/mindalpha-2.0.0+*-cp37-cp37m-linux_x86_64.whl pip
+find build/python-env/bin -type f -exec sed -i -e 's@^#!.\+/bin/python\(3\(\.7\)\?\)\?$@#!/usr/bin/env python3.7@' {} \;
+tar -czf build/python-env.tgz -C build/python-env $(ls build/python-env)
+rm -rf build/python-env
 popd
+echo OK

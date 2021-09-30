@@ -17,7 +17,11 @@
 #
 
 set -e
-pushd $(dirname ${BASH_SOURCE[0]})
-tag=$(source /etc/os-release; echo ${ID}${VERSION_ID})
-./docker/${tag}/compile.sh
+pushd $(dirname ${BASH_SOURCE[0]})/../..
+rm -rf build built
+mkdir -p build
+cd build
+cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=../built ..
+ninja
 popd
+echo OK
