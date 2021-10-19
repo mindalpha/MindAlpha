@@ -204,12 +204,19 @@ class PyTorchAgent(Agent):
         import pandas as pd
         minibatch_size = len(minibatch[self.input_label_column_index])
         if result is None:
-            result = [0.0] * minibatch_size
+            result = pd.Series([0.0] * minibatch_size)
         if len(result) != minibatch_size:
             message = "result length (%d) and " % len(result)
             message += "minibatch size (%d) mismatch" % minibatch_size
             raise RuntimeError(message)
         if not isinstance(result, pd.Series):
+            if len(result.reshape(-1)) == minibatch_size:
+                result = result.reshape(-1)
+            else:
+                message = "result can not be converted to pandas series; "
+                message += "result.shape: {}, ".format(result.shape)
+                message += "minibatch_size: {}".format(minibatch_size)
+                raise RuntimeError(message)
             result = pd.Series(result)
         return result
 

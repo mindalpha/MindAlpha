@@ -409,12 +409,19 @@ class Agent(object):
     def process_minibatch_result(self, minibatch, result):
         import pandas as pd
         if result is None:
-            result = [0.0] * len(minibatch)
+            result = pd.Series([0.0] * len(minibatch))
         if len(result) != len(minibatch):
             message = "result length (%d) and " % len(result)
             message += "minibatch size (%d) mismatch" % len(minibatch)
             raise RuntimeError(message)
         if not isinstance(result, pd.Series):
+            if len(result.reshape(-1)) == len(minibatch):
+                result = result.reshape(-1)
+            else:
+                message = "result can not be converted to pandas series; "
+                message += "result.shape: {}, ".format(result.shape)
+                message += "minibatch_size: {}".format(len(minibatch))
+                raise RuntimeError(message)
             result = pd.Series(result)
         return result
 
