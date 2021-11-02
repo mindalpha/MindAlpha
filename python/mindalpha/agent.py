@@ -403,7 +403,7 @@ class Agent(object):
         import pandas as pd
         columns = minibatch.apply(pd.Series)
         ndarrays = list(columns.values.T)
-        labels = columns[1].values.astype(np.int64)
+        labels = columns[1].values.astype(np.float32)
         return ndarrays, labels
 
     def process_minibatch_result(self, minibatch, result):
