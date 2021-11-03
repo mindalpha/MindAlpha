@@ -67,7 +67,9 @@ class PyTorchAgent(Agent):
 
     def distribute_module(self):
         buf = io.BytesIO()
+        self._save_custom_initializer_and_updaters()
         torch.save(self.module, buf, pickle_module=patching_pickle)
+        self._restore_custom_initializer_and_updaters()
         module = buf.getvalue()
         model_export_selector = self.model_export_selector
         rdd = self.spark_context.parallelize(range(self.worker_count), self.worker_count)
@@ -80,7 +82,55 @@ class PyTorchAgent(Agent):
         self = __class__.get_instance()
         self.module = module
         self.model_export_selector = model_export_selector
+        self._restore_custom_initializer_and_updaters()
         return _
+
+    def _is_batch_norm(self, name, mod):
+        if isinstance(mod, torch.nn.modules.batchnorm._BatchNorm):
+            if isinstance(mod, torch.nn.SyncBatchNorm):
+                message = f"module {name!r} is an instance of torch.nn.SyncBatchNorm, "
+                message += "which is not supported by DistributedTrainer"
+                raise RuntimeError(message)
+            return True
+        return False
+
+    def _save_custom_initializer_and_updaters(self):
+        for name, mod in self.module.named_modules():
+            if self._is_batch_norm(name, mod):
+                self._save_custom_initializer_and_updater(name, mod)
+
+    def _save_custom_initializer_and_updater(self, name, mod):
+        if mod.running_mean is not None and getattr(mod.running_mean, 'initializer', None) is not None:
+            mod._running_mean_initializer = mod.running_mean.initializer
+            del mod.running_mean.initializer
+        if mod.running_mean is not None and getattr(mod.running_mean, 'updater', None) is not None:
+            mod._running_mean_updater = mod.running_mean.updater
+            del mod.running_mean.updater
+        if mod.running_var is not None and getattr(mod.running_var, 'initializer', None) is not None:
+            mod._running_var_initializer = mod.running_var.initializer
+            del mod.running_var.initializer
+        if mod.running_var is not None and getattr(mod.running_var, 'updater', None) is not None:
+            mod._running_var_updater = mod.running_var.updater
+            del mod.running_var.updater
+
+    def _restore_custom_initializer_and_updaters(self):
+        for name, mod in self.module.named_modules():
+            if self._is_batch_norm(name, mod):
+                self._restore_custom_initializer_and_updater(name, mod)
+
+    def _restore_custom_initializer_and_updater(self, name, mod):
+        if mod.running_mean is not None and getattr(mod, '_running_mean_initializer', None) is not None:
+            mod.running_mean.initializer = mod._running_mean_initializer
+            del mod._running_mean_initializer
+        if mod.running_mean is not None and getattr(mod, '_running_mean_updater', None) is not None:
+            mod.running_mean.updater = mod._running_mean_updater
+            del mod._running_mean_updater
+        if mod.running_var is not None and getattr(mod, '_running_var_initializer', None) is not None:
+            mod.running_var.initializer = mod._running_var_initializer
+            del mod._running_var_initializer
+        if mod.running_var is not None and getattr(mod, '_running_var_updater', None) is not None:
+            mod.running_var.updater = mod._running_var_updater
+            del mod._running_var_updater
 
     def distribute_updater(self):
         updater = self.updater
@@ -123,7 +173,7 @@ class PyTorchAgent(Agent):
     def load_model(self):
         if self.model_in_path is not None:
             print('\033[38;5;196mloading model from %s\033[m' % self.model_in_path)
-            self.trainer.load(self.model_in_path)
+            self.trainer.load(self.model_in_path, keep_meta=True)
 
     def save_model(self):
         self.model.prune_old(self.max_sparse_feature_age)
