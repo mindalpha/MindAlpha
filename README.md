@@ -25,18 +25,20 @@ online prediction.
   Serving for online prediction.
 
 ## Build
+
 Firstly, run script to build a docker image
 
-``` shell
+```shell
 sh run_build.sh -i
 ```
 
-more detail please refer [docker/Dockerfile](docker/Dockerfile)
+For more details, please refer to [docker/ubuntu20.04/Dockerfile](docker/ubuntu20.04/Dockerfile)
+and [docker/centos7/Dockerfile](docker/centos7/Dockerfile).
 
-and run script to compile sources(*cpp&&py) to get dynamic-link library (\*.so) and
-python install packages (\*.whl) which will generate at directory *build* by default.
+and run script to compile sources(\*cpp && py) to get dynamic-link library (\*.so) and
+python install packages (\*.whl) which will generate at directory **build** by default.
 
-``` shell
+```shell
 sh run_build.sh -m
 ```
 
