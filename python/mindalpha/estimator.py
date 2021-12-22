@@ -44,6 +44,8 @@ class PyTorchAgent(Agent):
         self.model_export_path = None
         self.model_version = None
         self.experiment_name = None
+        self.training_epoches = None
+        self.shuffle_training_dataset = None
         self.max_sparse_feature_age = None
         self.metric_update_interval = None
         self.consul_host = None
@@ -204,8 +206,13 @@ class PyTorchAgent(Agent):
             self.feed_validation_dataset()
 
     def feed_training_dataset(self):
-        df = self.dataset.select(self.feed_training_minibatch()(*self.dataset.columns).alias('train'))
-        df.write.format('noop').mode('overwrite').save()
+        from .input import shuffle_df
+        for epoch in range(self.training_epoches):
+            df = self.dataset
+            if self.shuffle_training_dataset:
+                df = shuffle_df(df, self.worker_count)
+            df = df.select(self.feed_training_minibatch()(*df.columns).alias('train'))
+            df.write.format('noop').mode('overwrite').save()
 
     def feed_validation_dataset(self):
         df = self.dataset.withColumn(self.output_prediction_column_name,
@@ -315,6 +322,8 @@ class PyTorchLauncher(PSLauncher):
         self.model_export_path = None
         self.model_version = None
         self.experiment_name = None
+        self.training_epoches = None
+        self.shuffle_training_dataset = None
         self.max_sparse_feature_age = None
         self.metric_update_interval = None
         self.consul_host = None
@@ -349,6 +358,8 @@ class PyTorchLauncher(PSLauncher):
         self._agent_attributes['model_export_path'] = self.model_export_path
         self._agent_attributes['model_version'] = self.model_version
         self._agent_attributes['experiment_name'] = self.experiment_name
+        self._agent_attributes['training_epoches'] = self.training_epoches
+        self._agent_attributes['shuffle_training_dataset'] = self.shuffle_training_dataset
         self._agent_attributes['max_sparse_feature_age'] = self.max_sparse_feature_age
         self._agent_attributes['metric_update_interval'] = self.metric_update_interval
         self._agent_attributes['consul_host'] = self.consul_host
@@ -376,6 +387,8 @@ class PyTorchHelperMixin(object):
                  model_export_path=None,
                  model_version=None,
                  experiment_name=None,
+                 training_epoches=1,
+                 shuffle_training_dataset=False,
                  max_sparse_feature_age=15,
                  metric_update_interval=10,
                  consul_host=None,
@@ -399,6 +412,8 @@ class PyTorchHelperMixin(object):
         self.model_export_path = model_export_path
         self.model_version = model_version
         self.experiment_name = experiment_name
+        self.training_epoches = training_epoches
+        self.shuffle_training_dataset = shuffle_training_dataset
         self.max_sparse_feature_age = max_sparse_feature_age
         self.metric_update_interval = metric_update_interval
         self.consul_host = consul_host
@@ -442,6 +457,8 @@ class PyTorchHelperMixin(object):
             raise TypeError(f"model_version must be string; {self.model_version!r} is invalid")
         if self.experiment_name is not None and not isinstance(self.experiment_name, str):
             raise TypeError(f"experiment_name must be string; {self.experiment_name!r} is invalid")
+        if not isinstance(self.training_epoches, int) or self.training_epoches <= 0:
+            raise TypeError(f"training_epoches must be positive integer; {self.training_epoches!r} is invalid")
         if not isinstance(self.max_sparse_feature_age, int) or self.max_sparse_feature_age <= 0:
             raise TypeError(f"max_sparse_feature_age must be positive integer; {self.max_sparse_feature_age!r} is invalid")
         if not isinstance(self.metric_update_interval, int) or self.metric_update_interval <= 0:
@@ -502,6 +519,8 @@ class PyTorchHelperMixin(object):
         launcher.model_export_path = self.model_export_path
         launcher.model_version = self.model_version
         launcher.experiment_name = self.experiment_name
+        launcher.training_epoches = self.training_epoches
+        launcher.shuffle_training_dataset = self.shuffle_training_dataset
         launcher.max_sparse_feature_age = self.max_sparse_feature_age
         launcher.metric_update_interval = self.metric_update_interval
         launcher.consul_host = self.consul_host

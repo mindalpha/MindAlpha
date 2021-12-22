@@ -256,6 +256,23 @@ class Model(object):
                 futures.append(future)
         await asyncio.gather(*futures)
 
+    def prune_small(self, epsilon=1e-6):
+        if not isinstance(epsilon, float) or epsilon < 0.0:
+            if epsilon != 0:
+                raise TypeError(f"epsilon must be non-negative float or 0; {epsilon!r} is invalid")
+        self._do_prune_small(epsilon)
+
+    def prune_old(self, max_age):
+        if not isinstance(max_age, int) or max_age <= 0:
+            raise TypeError(f"max_age must be positive integer; {max_age!r} is invalid")
+        self._do_prune_old(max_age)
+
+    def _do_prune_small(self, epsilon):
+        pass
+
+    def _do_prune_old(self, max_age):
+        pass
+
     def _get_full_class_name(self, obj):
         cls = obj.__class__
         name = '%s.%s' % (cls.__module__, cls.__name__)
@@ -490,18 +507,13 @@ class SparseModel(Model):
         meta['sparse_tensors'] = sparse_tensors
         return meta
 
-    def prune_small(self, epsilon=1e-6):
-        if not isinstance(epsilon, float) or epsilon < 0.0:
-            if epsilon != 0:
-                raise TypeError(f"epsilon must be non-negative float or 0; {epsilon!r} is invalid")
+    def _do_prune_small(self, epsilon):
         self.agent.barrier()
         if self.agent.rank == 0:
             asyncio.run(self._sparse_tensors_prune_small(epsilon))
         self.agent.barrier()
 
-    def prune_old(self, max_age):
-        if not isinstance(max_age, int) or max_age <= 0:
-            raise TypeError(f"max_age must be positive integer; {max_age!r} is invalid")
+    def _do_prune_old(self, max_age):
         self.agent.barrier()
         if self.agent.rank == 0:
             asyncio.run(self._sparse_tensors_prune_old(max_age))
