@@ -500,6 +500,7 @@ class EmbeddingOperator(torch.nn.Module):
 
     @torch.jit.unused
     def _compute_sum_concat(self):
+        self._check_embedding_bag_mode(self.embedding_bag_mode)
         feature_count = self.feature_count
         minibatch_size = len(self._indices_meta) // feature_count
         embedding_size = self._checked_get_embedding_size()
@@ -527,7 +528,7 @@ class EmbeddingOperator(torch.nn.Module):
 
     @torch.jit.unused
     def _compute_range_sum(self):
-        self._check_embedding_bag_mode(mode)
+        self._check_embedding_bag_mode(self.embedding_bag_mode)
         t = self._compute_embedding_prepare()
         minibatch_size, embedding_size, indices_1d, offsets_1d = t
         embs = torch.nn.functional.embedding_bag(indices_1d, self._data, offsets_1d, mode=self.embedding_bag_mode)
