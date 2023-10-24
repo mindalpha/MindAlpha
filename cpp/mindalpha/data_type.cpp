@@ -86,4 +86,23 @@ size_t DataTypeToSize(DataType type)
     }
 }
 
+UserOption::UserOption(const std::string& str) {
+    std::string err;
+    if (str.empty()) {
+        return;
+    }
+    json = json11::Json::parse(str, err);
+    if (!err.empty()) {
+        std::string serr("__UserOption__ ");
+        serr.append(str);
+        serr.append("Parse Fail");
+        throw std::runtime_error(serr);
+    }
+    enable_half_float = json["enable_half_float"].bool_value();
+    half_float_type = json["half_float_type"].string_value();
+    scalar = json["scalar"].int_value();
+}
+std::string UserOption::ToString() const {
+    return json.dump();
+}
 }

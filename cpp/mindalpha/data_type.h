@@ -18,12 +18,13 @@
 
 #include <stdint.h>
 #include <string>
+#include <json11.hpp>
+#include <iostream>
 
 //
 // ``data_type.h`` defines enum ``DataType`` to represent numeric data types
 // and some helper functions to convert ``DataType`` values.
 //
-
 namespace mindalpha
 {
 
@@ -45,9 +46,9 @@ namespace mindalpha
     X(uint64_t, uint64,  UInt64)          \
     /**/
 
-#define MINDALPHA_FLOATING_DATA_TYPES(X)  \
-    X(float,    float32, Float32)         \
-    X(double,   float64, Float64)         \
+#define MINDALPHA_FLOATING_DATA_TYPES(X)             \
+    X(float,               float32, Float32)         \
+    X(double,              float64, Float64)         \
     /**/
 
 #define MINDALPHA_DATA_TYPES(X)           \
@@ -100,4 +101,15 @@ inline T AsNumber(T value) { return value; }
 inline int32_t AsNumber(int8_t value) { return static_cast<int32_t>(value); }
 inline uint32_t AsNumber(uint8_t value) { return static_cast<uint32_t>(value); }
 
+class UserOption {
+  public:
+    UserOption(const std::string& str);
+    std::string ToString() const;
+  public:
+    int type;
+    bool enable_half_float;
+    int scalar;
+    std::string half_float_type;
+    json11::Json json;
+};
 }

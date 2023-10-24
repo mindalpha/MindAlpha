@@ -93,6 +93,7 @@ add_library(mindalpha_shared SHARED
     cpp/mindalpha/ml_ps_python_bindings.cpp
     cpp/mindalpha/tensor_store_python_bindings.cpp
     cpp/mindalpha/feature_extraction_python_bindings.cpp
+    cpp/mindalpha/array_hash_map_helper.cpp
 )
 set_target_properties(mindalpha_shared PROPERTIES PREFIX "")
 set_target_properties(mindalpha_shared PROPERTIES OUTPUT_NAME _mindalpha)

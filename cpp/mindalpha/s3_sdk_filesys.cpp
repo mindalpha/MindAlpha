@@ -62,6 +62,11 @@ public:
             std::cout << "Get aws endpoint from env: " << ep << std::endl;
             clientConfigPtr->endpointOverride = ep;
         }
+        ep = getenv("AWS_REGION");
+        if (ep) {
+            std::cout << "Get aws endpoint -region from env: " << ep << std::endl;
+            clientConfigPtr->region = ep;
+        }
         clientConfigPtr->scheme = Aws::Http::Scheme::HTTP;
         clientConfigPtr->connectTimeoutMs = 60000;
         clientConfigPtr->requestTimeoutMs = 60000;
